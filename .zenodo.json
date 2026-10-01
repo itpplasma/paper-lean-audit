@@ -1,0 +1,26 @@
+{
+  "title": "Paper\u2013Lean Audit: reproducible correspondence review generator",
+  "upload_type": "software",
+  "description": "Apache-2.0 generator of self-contained HTML reviews linking LaTeX manuscript claims to exact Lean theorem statements, definitions and pinned source. Human correspondence review remains distinct from kernel verification.",
+  "creators": [
+    {
+      "name": "Albert, Christopher",
+      "affiliation": "Graz University of Technology",
+      "orcid": "0000-0003-4773-416X"
+    }
+  ],
+  "license": "Apache-2.0",
+  "access_right": "open",
+  "keywords": [
+    "Lean",
+    "LaTeX",
+    "formal verification",
+    "mathematical review"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/itpplasma/stafford38-supplementary",
+      "relation": "isSupplementTo"
+    }
+  ]
+}

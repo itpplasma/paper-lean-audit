@@ -1,0 +1,184 @@
+{
+  "schema": 1,
+  "version": "review-1",
+  "title": "Paper and Lean correspondence review",
+  "subtitle": "Publication claims and exact formal statements",
+  "output_stem": "review",
+  "sources": {
+    "paper": {
+      "repo": "your-org/paper",
+      "commit": "REPLACE_WITH_FULL_COMMIT",
+      "file": "main.tex"
+    },
+    "formal": {
+      "repo": "your-org/formal",
+      "commit": "REPLACE_WITH_FULL_COMMIT"
+    }
+  },
+  "vocab": {
+    "statement_relation": {
+      "exact": {
+        "label": "exact",
+        "color": "green",
+        "meaning": "The Lean statement says what the paper says (up to notation)."
+      },
+      "equivalent": {
+        "label": "equivalent",
+        "color": "teal",
+        "meaning": "Different formulation (e.g. prime spectrum instead of point set, left instead of right coefficients); the equivalence is explained on the card."
+      },
+      "lean-stronger": {
+        "label": "Lean stronger",
+        "color": "blue",
+        "meaning": "Lean proves a more general statement (e.g. any algebraically closed field of characteristic 0, n \u2265 0); the paper statement is a special case."
+      },
+      "partial": {
+        "label": "partial",
+        "color": "amber",
+        "meaning": "Only part of the paper statement, or a neighbouring statement, is formalized."
+      },
+      "paper-wrong": {
+        "label": "paper wrong",
+        "color": "red",
+        "meaning": "The paper statement is false or ill-typed as printed; Lean proves the corrected statement that the argument actually needs."
+      },
+      "none": {
+        "label": "not formalized",
+        "color": "grey",
+        "meaning": "No Lean counterpart."
+      },
+      "unverifiable": {
+        "label": "not checkable here",
+        "color": "purple",
+        "meaning": "Claims about artefacts outside the audited repositories."
+      },
+      "n/a": {
+        "label": "n/a",
+        "color": "grey",
+        "meaning": "Not a statement (proof text, prose)."
+      }
+    },
+    "route_relation": {
+      "same": {
+        "label": "same",
+        "color": "green",
+        "meaning": "Lean follows the paper proof step by step."
+      },
+      "similar": {
+        "label": "similar",
+        "color": "teal",
+        "meaning": "Same idea; Lean reorganises or makes steps explicit."
+      },
+      "different": {
+        "label": "different",
+        "color": "orange",
+        "meaning": "Lean proves the statement by a different argument; the paper proof itself is not machine-checked."
+      },
+      "lean-only": {
+        "label": "proved in Lean only",
+        "color": "blue",
+        "meaning": "The paper cites the result; Lean contains a full proof."
+      },
+      "unformalized": {
+        "label": "unformalized",
+        "color": "red",
+        "meaning": "Paper proof with no formal counterpart."
+      },
+      "n/a": {
+        "label": "n/a",
+        "color": "grey",
+        "meaning": "No proof involved."
+      }
+    },
+    "severity": {
+      "critical": {
+        "label": "critical",
+        "color": "red",
+        "rank": 5,
+        "meaning": "A printed statement is false, or a claimed conclusion is not established. (None threatens Theorem 1.1, whose Lean proof is independent.)"
+      },
+      "major": {
+        "label": "major",
+        "color": "orange",
+        "rank": 4,
+        "meaning": "Real gap or false step that needs a new argument or a rewrite of the passage."
+      },
+      "minor": {
+        "label": "minor",
+        "color": "amber",
+        "rank": 3,
+        "meaning": "Local fix: missing hypothesis, justification, or citation."
+      },
+      "editorial": {
+        "label": "editorial",
+        "color": "grey",
+        "rank": 2,
+        "meaning": "Typos, notation, numbering, wording."
+      },
+      "note": {
+        "label": "note",
+        "color": "blue",
+        "rank": 1,
+        "meaning": "Information for the reviewer, no change required."
+      }
+    }
+  },
+  "review_checks": [
+    {
+      "id": "statement",
+      "label": "Lean statement matches (or relation is as stated)"
+    },
+    {
+      "id": "route",
+      "label": "Proof route understood"
+    },
+    {
+      "id": "issues",
+      "label": "Issues triaged"
+    },
+    {
+      "id": "publication",
+      "label": "Proposed publication statement matches a proved endpoint with the same hypotheses and conclusion"
+    }
+  ],
+  "sections": [
+    {
+      "number": "1",
+      "title": "Main result"
+    }
+  ],
+  "items": [
+    {
+      "id": "main",
+      "section": "1",
+      "kind": "Theorem",
+      "title": "Main result",
+      "short": "Main result",
+      "tex_lines": [
+        1,
+        10
+      ],
+      "statement_relation": "partial",
+      "route_relation": "n/a",
+      "correspondence": "Record the exact hypotheses and conclusion comparison here; human review pending.",
+      "review_scope": "publication",
+      "lean": [
+        {
+          "file": "Main.lean",
+          "name": "YourProject.main",
+          "role": "statement"
+        }
+      ],
+      "issues": [],
+      "depends_on": [],
+      "in_graph": false
+    }
+  ],
+  "extra_refs": {},
+  "lean_only": [],
+  "aicomments": [],
+  "global_issues": [],
+  "overview": "Check definitions and hypotheses before signing off.",
+  "how_to_use": "Compare the paper statement to its proved Lean endpoint.",
+  "provenance": "Replace source pins and declaration mappings with your project inputs."
+}
