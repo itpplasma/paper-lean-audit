@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TexRenderer, escapeHtml, stripComments, readGroup } from './texhtml.mjs';
 import { findDeclaration, extractStatement, highlightLean, namedResultType, definitionNames, declarationContext, bindingNames, declarationTrust } from './lean.mjs';
+import { reviewScopeOptions } from './review-scope.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -761,7 +762,7 @@ const html = `<!doctype html>
 <body>
 <nav class="side">
   <div class="brand">Stafford 3.8<br><span>paper ↔ Lean audit</span></div>
-  <label for="review-scope">Review scope</label><select id="review-scope"><option value="publication">Whole paper correspondence (default)</option><option value="alternative">Optional proof variants</option><option value="all">All reference material</option></select>
+  <label for="review-scope">Review scope</label><select id="review-scope">${reviewScopeOptions(items)}</select>
   <input id="filter" type="search" placeholder="Filter cards…">
   <div class="filters">
     <label><input type="checkbox" id="only-issues"> with issues</label>
@@ -769,7 +770,7 @@ const html = `<!doctype html>
     <label><input type="checkbox" id="clean-text"> hide AI markup</label>
   </div>
   <ol class="toc">
-    <li><a href="#overview">Overview</a></li><li><a href="#graph">Dependency map</a></li>
+    <li><a href="#overview">Overview</a></li><li><a href="#graph">Dependency map</a></li>${challengeDefinitions ? '<li><a href="#challenge-definitions">Challenge definitions</a></li>' : ''}
     ${map.sections.map((sec) => `<li><a href="#sec-${escapeHtml(sec.number)}">${escapeHtml(sec.number)}. ${escapeHtml(sec.title)}</a><ol>${items.filter((it) => it.section === sec.number).map((it) => `<li><a href="#item-${slug(it.id)}" data-toc="${escapeHtml(it.id)}">${escapeHtml(it.short ?? it.id)}</a></li>`).join('')}</ol></li>`).join('')}
     <li><a href="#lean-only">Lean-only steps</a></li><li><a href="#issues">Issue register</a></li>
     <li><a href="#aicomments">AI comments</a></li><li><a href="#lean-index">Lean → paper index</a></li><li><a href="#provenance">Provenance</a></li>
