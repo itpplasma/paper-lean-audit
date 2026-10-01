@@ -22,5 +22,6 @@
       "identifier": "https://github.com/itpplasma/stafford38-supplementary",
       "relation": "isSupplementTo"
     }
-  ]
+  ],
+  "version": "v0.1.2"
 }

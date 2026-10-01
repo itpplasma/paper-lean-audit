@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "Please cite the exact archived release when its DOI is available."
 title: "Paper–Lean Audit: reproducible correspondence review generator"
 type: software
-version: 0.1.1
+version: 0.1.2
 license: Apache-2.0
 repository-code: "https://github.com/itpplasma/paper-lean-audit"
 authors:
