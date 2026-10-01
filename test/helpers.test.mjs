@@ -51,6 +51,30 @@ test('statements stop before the proof; definitions keep their body', () => {
   assert.match(def.text, /∀ n : Nat, n = n$/);
 });
 
+test('explicit universe binders preserve exported names and namespace selection', () => {
+  const src = ['namespace Challenge',
+    'abbrev UniversalStatement.{u} : Prop := True',
+    'theorem result.{u, v} : UniversalStatement.{u} := trivial',
+    'def _root_.Shared.Predicate.{u} : Prop := True',
+    'end Challenge',
+    'namespace Unrelated',
+    'abbrev UniversalStatement.{u} : Prop := False',
+    'end Unrelated'].join('\n');
+  const target = findDeclaration(src, 'Challenge.UniversalStatement', 7);
+  assert.equal(target.qualified, 'Challenge.UniversalStatement');
+  assert.equal(target.line, 2);
+  assert.equal(target.exact, true);
+  assert.equal(target.exported, true);
+  assert.equal(findDeclaration(src, 'Challenge.result').line, 3);
+  assert.equal(findDeclaration(src, 'Shared.Predicate').line, 4);
+  assert.deepEqual(definitionNames(src), [
+    { name: 'Challenge.UniversalStatement', line: 2 },
+    { name: 'Shared.Predicate', line: 4 },
+    { name: 'Unrelated.UniversalStatement', line: 7 },
+  ]);
+  assert.equal(findDeclaration(src, 'Challenge.UniversalStatement.'), null);
+});
+
 test('TeX helpers: comments, groups, AI markup, references', () => {
   assert.equal(stripComments('a % c\n\\% b'), 'a \n\\% b');
   assert.deepEqual(readGroup('{a{b}c}d', 0), ['a{b}c', 7]);

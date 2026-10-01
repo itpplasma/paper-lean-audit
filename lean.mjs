@@ -5,6 +5,12 @@ import { escapeHtml } from './texhtml.mjs';
 
 const DECL_RE = /^\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|nonrec|partial|unsafe|scoped|local)\s+)*(theorem|lemma|def|abbrev|structure|class|instance|inductive|opaque|axiom)\s+([^\s:({\[]+)/;
 
+// The dot before an explicit universe binder (`name.{u}`) is syntax,
+// rather than part of the declaration's exported name.
+function declarationName(match) {
+  return match[2].replace(/\.$/, '');
+}
+
 // Replace comments and string contents with spaces while preserving newlines
 // and offsets. Lean block comments nest, and declaration-looking text in a
 // comment must never affect namespace or declaration lookup.
@@ -83,10 +89,10 @@ export function findDeclaration(text, fullName, hintLine) {
   codeLines.forEach((line, i) => {
     const m = DECL_RE.exec(line);
     if (!m) return;
-    const declared = m[2].replace(/^_root_\./, '');
+    const declared = declarationName(m).replace(/^_root_\./, '');
     if (declared === short || fullName.endsWith('.' + declared) || declared === fullName) {
       const ns = namespaceAt(lines, i);
-      const qualified = m[2].startsWith('_root_.') ? declared : [...ns, declared].join('.');
+      const qualified = declarationName(m).startsWith('_root_.') ? declared : [...ns, declared].join('.');
       const modifierText = m[0].slice(0, m[0].indexOf(m[1]));
       const visibility = /\bprivate\b/.test(modifierText) ? 'private'
         : /\blocal\b/.test(modifierText) ? 'local' : 'public';
@@ -264,7 +270,8 @@ export function definitionNames(text) {
   return maskLeanCommentsAndStrings(text).split('\n').flatMap((line, i) => {
     const m = DECL_RE.exec(line);
     if (!m || !['def', 'abbrev'].includes(m[1]) || /\b(?:private|local)\b/.test(m[0])) return [];
-    const name = m[2].startsWith('_root_.') ? m[2].slice(7) : [...namespaceAt(lines, i), m[2]].join('.');
+    const declared = declarationName(m);
+    const name = declared.startsWith('_root_.') ? declared.slice(7) : [...namespaceAt(lines, i), declared].join('.');
     return [{ name, line: i + 1 }];
   });
 }
