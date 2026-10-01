@@ -120,11 +120,11 @@ function fixture(t) {
   const reviews = path.join(root, 'reviews');
   fs.mkdirSync(reviews);
   const writeMap = () => fs.writeFileSync(mapPath, JSON.stringify(map, null, 2));
-  const run = (extra = []) => {
+  const run = () => {
     writeMap();
     return spawnSync(process.execPath, [buildScript, '--paper', paper.repo, '--formal', formal.repo,
       '--library', library.repo, '--global', global.repo, '--map', mapPath, '--out', out,
-      '--reviews', reviews, '--check', ...extra], { encoding: 'utf8' });
+      '--reviews', reviews, '--check'], { encoding: 'utf8' });
   };
   const htmlPath = path.join(out, 'stafford38-paper-lean-audit.html');
   return { root, paper, formal, library, global, map, mapPath, reviews, htmlPath, currentPaperSource, run, writeMap };
@@ -395,16 +395,20 @@ test('a child excerpt of replacement text keeps proposal styling and original so
   assert.doesNotMatch(card,/Old covered theorem/);
 });
 
-test('an unrelated project can supply custom source roles and output filenames', t => {
+// A historical duplicate must not redirect a current equation reference.
+test('commented historical labels do not shadow active equation targets', (t) => {
   const f = fixture(t);
-  f.map.sources.external = {repo:'independent/custom', commit:f.library.commit};
-  f.map.items[0].steps[0].lean[1].repo='external';
-  f.map.output_stem='independent-review';
-  f.map.title='A different mathematical paper';
-  const result=f.run(['--source', 'external='+f.library.repo]);
-  assert.equal(result.status,0,result.stderr);
-  const html=fs.readFileSync(path.join(f.root,'out','independent-review.html'),'utf8');
-  assert.match(html,/A different mathematical paper/);
-  assert.match(html,/github.com\/independent\/custom\/blob/);
-  assert.match(html,/Foo.valid/);
+  const source = f.currentPaperSource.replace('A covered theorem.', 'A covered theorem. \\label{eq:active}')
+    .replace('An unlabelled definition;', '% \\label{eq:active}\nAn unlabelled definition; see \\eqref{eq:active};');
+  fs.writeFileSync(path.join(f.paper.repo, 'human_readable_main.tex'), source);
+  git(f.paper.repo, 'add', 'human_readable_main.tex');
+  execFileSync('git', ['-C', f.paper.repo, '-c', 'user.name=Audit Test', '-c', 'user.email=audit@example.test', 'commit', '-qm', 'historical label']);
+  f.map.sources.paper.commit = git(f.paper.repo, 'rev-parse', 'HEAD');
+  f.map.extra_refs['eq:active'] = 'Active';
+  f.map.items[0].tex_lines = [6, 8];
+  f.map.items[1].tex_lines = [9, 22];
+  const result = f.run();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const html = fs.readFileSync(f.htmlPath, 'utf8');
+  assert.match(html, /href="#item-thm">\(Active\)<\/a>/);
 });
