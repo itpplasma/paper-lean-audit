@@ -497,3 +497,25 @@ test('commented historical labels do not shadow active equation targets', (t) =>
   const html = fs.readFileSync(f.htmlPath, 'utf8');
   assert.match(html, /href="#item-thm">\(Active\)<\/a>/);
 });
+
+
+test('duplicate review-comment IDs fail the build while inactive copies are ignored', (t) => {
+  const f = fixture(t);
+  const file = path.join(f.paper.repo, 'human_readable_main.tex');
+  fs.appendFileSync(file, [
+    '\\AIcomment{GEO-06}{First proposal.}',
+    '\\AIcomment{GEO-06}{A different proposal with the same identity.}',
+  ].join('\n') + '\n');
+  const rejected = f.run();
+  assert.notEqual(rejected.status, 0);
+  assert.match(rejected.stderr + rejected.stdout, /Duplicate AIcomment ID 'GEO-06' in current manuscript/);
+
+  fs.writeFileSync(file, f.currentPaperSource + [
+    '\\AIcomment{GEO-06}{First proposal.}',
+    '\\AIcomment{GEO-07}{A separate proposal.}',
+    '% \\AIcomment{GEO-06}{Inactive historical copy.}',
+    '\\\\AIcomment{GEO-06}{Escaped text.}',
+  ].join('\n') + '\n');
+  const accepted = f.run();
+  assert.equal(accepted.status, 0, accepted.stderr + accepted.stdout);
+});

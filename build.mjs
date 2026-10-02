@@ -231,6 +231,23 @@ function checkStatementCoverage(sourceText) {
   }
 }
 checkStatementCoverage(currentPaperRaw);
+function checkAnnotationIds(source, revision) {
+  const clean = stripComments(source);
+  const seen = new Map();
+  for (const match of clean.matchAll(/\\AIcomment\s*\{/g)) {
+    if (escapedCommand(clean, match.index)) continue;
+    const [rawId] = readGroup(clean, match.index + match[0].length - 1);
+    const id = rawId.trim();
+    if (!id || /#\d/.test(id)) continue;
+    const line = clean.slice(0, match.index).split('\n').length;
+    if (seen.has(id)) {
+      errors.push(`Duplicate AIcomment ID '${id}' in ${revision} manuscript at ${paperFile}:${line}; first at line ${seen.get(id)}`);
+    } else seen.set(id, line);
+  }
+}
+checkAnnotationIds(texRaw, 'pinned');
+checkAnnotationIds(currentPaperRaw, 'current');
+
 for (const it of items) {
   if (it.label) refs[it.label] = { text: it.number ?? it.label, href: `#item-${slug(it.id)}` };
 }
