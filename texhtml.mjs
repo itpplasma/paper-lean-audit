@@ -162,7 +162,7 @@ export class TexRenderer {
       if (finalTag && display) {
         const split = detachKaTeXTag(html);
         if (!split) throw new Error('KaTeX did not emit a separable equation tag');
-        return `<div class="dmath-layout"><div class="dmath-formula" title="Scroll horizontally to see the entire formula">${split.formula}</div><span class="dmath-tag">${split.tag}</span></div>`;
+        return `<div class="dmath-layout"><div class="dmath-formula" title="Scroll horizontally to see the entire formula">${split.formula}</div><span class="dmath-tag" aria-hidden="true">${split.tag}</span></div>`;
       }
       return html;
     } catch (e) {

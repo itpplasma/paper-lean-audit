@@ -73,6 +73,8 @@ test('wide tagged displays keep the tag beside a separately scrollable formula',
     }
 
     const normal = await measure(1400);
+    assert.equal(await page.locator('.dmath-tag').getAttribute('aria-hidden'), 'true',
+      'MathML already carries the equation label, so the detached visual copy is hidden from assistive technology');
     assert.ok(normal.formula.right < normal.tag.left, `tag must be outside the formula at normal width: ${JSON.stringify(normal)}`);
     assert.ok(normal.tag.right <= normal.layout.right + 1, `tag must remain in the display at normal width: ${JSON.stringify(normal)}`);
     assert.ok(normal.formulaScroll <= normal.formulaClient + 1, `fixture should fit at normal width: ${JSON.stringify(normal)}`);

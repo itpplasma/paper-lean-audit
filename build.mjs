@@ -509,13 +509,29 @@ function md(s) {
 const definitionRefs = map.challenge_definitions ?? [];
 const definitionAnchor = (ref) => `definition-${slug((ref.repo ?? 'formal') + ':' + ref.name)}`;
 function symbolLink(info, token) {
-  const candidates = definitionRefs.filter((ref) => {
-    if (ref.name === token) return true;
-    if (!ref.name.endsWith('.' + token)) return false;
-    return (ref.repo ?? 'formal') === info.repo && (ref.file === info.file ||
-      info.name.startsWith(ref.name.slice(0, ref.name.lastIndexOf('.')) + '.'));
-  });
-  return candidates.length === 1 ? '#' + definitionAnchor(candidates[0]) : null;
+  // The lexer keeps the trailing dot in `name.{u}` as part of the identifier
+  // token. It is universe-application syntax, so match the declaration name
+  // without the dot while keeping the rendered token intact.
+  const lookup = token.replace(/\.$/, '');
+  const exactLink = (refs) => refs.length === 1 ? '#' + definitionAnchor(refs[0]) : null;
+
+  // Lean resolves an unqualified identifier from the innermost namespace
+  // outward before considering a root-level declaration. A short-name match
+  // in some unrelated namespace is not enough evidence for a link.
+  if (!lookup.includes('.')) {
+    const parts = (info.name ?? '').split('.');
+    parts.pop(); // The final component is the declaration being rendered.
+    for (let n = parts.length; n > 0; n--) {
+      const candidate = parts.slice(0, n).concat(lookup).join('.');
+      const local = definitionRefs.filter((ref) => ref.name === candidate);
+      if (local.length) return exactLink(local);
+    }
+  }
+
+  // Explicitly qualified references, and unqualified root names such as
+  // Mathlib's Field, resolve only when exactly one curated owner has that
+  // exact name. Do not guess among namespaced suffix matches.
+  return exactLink(definitionRefs.filter((ref) => ref.name === lookup));
 }
 function leanBlock(info, role) {
   if (!info.url) return `<div class="lean missing">✗ ${escapeHtml(info.name ?? info.file)} — not resolved</div>`;
