@@ -1,6 +1,6 @@
 # Current status
 
-Updated 2 October 2026. The bounded generator repair is complete and saved. Work is paused at the owner's request, with all owned agents stopped. The repair includes the imported review-scope module in approval digests and renders run-in `\paragraph` headings. The focused checks passed: 24 tests, 0 failures, and 1 existing manuscript integration test skipped because its sibling paper clone is unavailable.
+Updated 3 October 2026. Guided paper-order review now provides a starting link, previous/next claim navigation and a saved resume position carried by review exports. The full suite passed 64 tests; one existing manuscript integration test was skipped because its expected sibling clone is unavailable. Chromium checks cover navigation, reload and export/import without losing findings or checks. The earlier review-scope digest and run-in `\paragraph` repairs remain included.
 
 The saved generator also supports Lean's module/public-section visibility and rejects duplicate manuscript annotation identifiers. The earlier checkpoint's full audit-tool suite passed all 62 tests. Source-linked review bundles still require exact committed manuscript, formal-source and mapping inputs.
 

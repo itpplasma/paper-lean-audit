@@ -21,6 +21,6 @@ The [Stafford supplementary project](https://github.com/itpplasma/stafford38-sup
 npm test
 ```
 
-Review notes stay in the browser until exported as JSON. Input or generator changes invalidate sign-offs while preserving notes. Browser-side notes are not shared collaboration state. Named definitions and source links improve inspection; neither an HTML badge nor a checklist is evidence of a theorem proof.
+Use the starting link to review claims in paper order, then follow the previous/next links. The resume link returns to the last visited or edited claim. Export JSON to retain or share findings, checks and that position; import it to continue. Review notes stay in the browser until exported. Input or generator changes invalidate sign-offs while preserving notes. Browser-side notes are not shared collaboration state. Named definitions and source links improve inspection; neither an HTML badge nor a checklist is evidence of a theorem proof.
 
 Apache-2.0 covers the generator. Input manuscript excerpts and third-party packages retain their own licenses. See LICENSE and NOTICE.
