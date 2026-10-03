@@ -29,15 +29,22 @@ function fixture() {
     '<input id="filter"><input id="only-issues" type="checkbox">' +
     '<input id="only-open" type="checkbox"><input id="clean-text" type="checkbox">' +
     '</div>';
-  const card = (id, title) => '<section class="card" data-sev="0"><h2>' + title + '</h2>' +
-    '<a data-toc="' + id + '"></a>' +
+  const card = (id, title, position) => '<section class="card" id="' + id + '" data-sev="0"><h2>' + title + '</h2>' +
+    '<a data-toc="' + id + '" href="#' + id + '">' + title + '</a>' +
     '<div class="review" data-item="' + id + '" data-hash="' + currentHash + '">' +
     '<input type="checkbox" data-check="statement">' +
     '<input type="checkbox" data-check="route">' +
     '<input type="checkbox" data-check="issues">' +
-    '<textarea data-notes></textarea></div></section>';
+    '<textarea data-notes></textarea></div>' +
+    '<nav class="guided-claim-nav" aria-label="Paper-order claim navigation">' +
+    (position === 1 ? '<span class="guided-disabled">First claim</span>' : '<a rel="prev" data-guided-visit="item-one" href="#item-one">Previous claim</a>') +
+    '<span>Paper-order claim ' + position + ' of 2</span>' +
+    (position === 2 ? '<span class="guided-disabled">Last claim</span>' : '<a rel="next" data-guided-visit="item-two" href="#item-two">Next claim</a>') +
+    '</nav></section>';
   return '<!doctype html><meta charset="utf-8"><body>' + controls +
-    card('item-one', 'First claim') + card('item-two', 'Second claim') +
+    '<p><a data-guided-start href="#item-one">Start guided review</a> · ' +
+    '<a id="guided-resume" data-guided-resume hidden>Resume last visited claim</a></p>' +
+    card('item-one', 'First claim', 1) + card('item-two', 'Second claim', 2) +
     '<script>window.AUDIT_META = ' + JSON.stringify(meta) + ';</script></body>';
 }
 
@@ -278,6 +285,80 @@ test('publication queue separates optional variants and blocks stale-version sig
     assert.equal(await page.locator('[data-item="item-one"] [data-notes]').inputValue(), 'Keep this review note');
     await page.close();
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
+});
+
+
+test('guided paper-order navigation resumes and exports without changing claim notes or checks', async (t) => {
+  assert.ok(executablePath, 'set CHROMIUM_PATH or install Chromium to run browser tests');
+  const server = createServer((_, response) => {
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    response.end(fixture());
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const url = 'http://127.0.0.1:' + server.address().port;
+  let browser;
+  try {
+    browser = await chromium.launch({ executablePath, headless: true, args: ['--no-sandbox'] });
+    const page = await openReview(browser, url);
+    const resume = page.locator('#guided-resume');
+    assert.equal(await resume.isHidden(), true);
+
+    await page.locator('#reviewer').fill('Ada');
+    await page.locator('[data-guided-start]').click();
+    assert.match(page.url(), /#item-one$/);
+    await page.locator('[data-item="item-one"] [data-notes]').fill('Check the coefficient hypothesis.');
+    await page.locator('[data-item="item-one"] [data-check="statement"]').check();
+    assert.equal(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).lastEntry, currentKey), 'item-one');
+    await page.locator('#item-one [data-guided-visit="item-two"]').click();
+    assert.match(page.url(), /#item-two$/);
+
+    const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), currentKey);
+    assert.equal(saved.lastEntry, 'item-two');
+    assert.equal(saved.items['item-one'].notes, 'Check the coefficient hypothesis.');
+    assert.equal(saved.items['item-one'].checks.statement, true);
+
+    await page.reload();
+    await page.addScriptTag({ path: reviewScript });
+    assert.equal(await resume.isVisible(), true);
+    assert.equal(await resume.getAttribute('href'), '#item-two');
+    assert.match(await resume.textContent(), /Second claim/);
+    await resume.click();
+    assert.match(page.url(), /#item-two$/);
+    assert.equal(await page.locator('[data-item="item-one"] [data-notes]').inputValue(), 'Check the coefficient hypothesis.');
+    assert.equal(await page.locator('[data-item="item-one"] [data-check="statement"]').isChecked(), true);
+
+    await page.evaluate(() => {
+      const create = URL.createObjectURL.bind(URL);
+      window.__exportBlob = null;
+      URL.createObjectURL = (blob) => { window.__exportBlob = blob; return create(blob); };
+    });
+    await page.locator('#export').click();
+    await page.waitForFunction(() => Boolean(window.__exportBlob));
+    const payload = await page.evaluate(async () => JSON.parse(await window.__exportBlob.text()));
+    assert.equal(payload.last_entry, 'item-two');
+    assert.equal(payload.items['item-one'].notes, 'Check the coefficient hypothesis.');
+    assert.equal(payload.items['item-one'].checks.statement, true);
+
+    const restored = await browser.newPage();
+    await restored.goto(url);
+    await restored.addScriptTag({ path: reviewScript });
+    await restored.locator('#import').setInputFiles({
+      name: 'review.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(payload)),
+    });
+    await restored.waitForFunction(() => document.querySelector('#guided-resume').getAttribute('href') === '#item-two');
+    assert.equal(await restored.locator('#guided-resume').getAttribute('href'), '#item-two');
+    assert.equal(await restored.locator('[data-item="item-one"] [data-notes]').inputValue(), 'Check the coefficient hypothesis.');
+    assert.equal(await restored.locator('[data-item="item-one"] [data-check="statement"]').isChecked(), true);
+    await restored.locator('[data-guided-start]').click();
+    assert.match(restored.url(), /#item-one$/);
+    assert.equal(await restored.evaluate((key) => JSON.parse(localStorage.getItem(key)).lastEntry, currentKey), 'item-one');
+    assert.equal(await restored.locator('[data-item="item-one"] [data-notes]').inputValue(), 'Check the coefficient hypothesis.');
+    await restored.close();
+    await page.close();
+  } finally {
+    if (browser) await browser.close();
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
 
 

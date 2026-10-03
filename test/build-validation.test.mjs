@@ -145,6 +145,11 @@ test('check audits current manuscript links, statement coverage, pins, and secti
   assert.match(html, /1\.1/);
   assert.match(html, /1\.2/);
   assert.match(html, /2\.1/);
+  assert.match(html, /data-guided-start href="#item-thm">Start guided review/);
+  assert.match(html, /Paper-order claim 1 of 2/);
+  assert.match(html, /data-guided-visit="def" href="#item-def">Next claim/);
+  assert.match(html, /data-guided-visit="thm" href="#item-thm">← Previous claim/);
+  assert.match(html, /id="guided-resume" data-guided-resume hidden/);
  assert.match(html, /href="#item-def">\(1\.1\)<\/a>/);
  assert.match(html, /href="#item-def">\(1\.2\)<\/a>/);
   assert.match(html, /Manual/);

@@ -187,6 +187,9 @@ const lineOfLabel = {};
 texLines.forEach((line, i) => { for (const m of stripComments(line).matchAll(/\\label\{([^}]*)\}/g)) lineOfLabel[m[1]] = i + 1; });
 
 const items = map.items;
+// The rendered sequence follows the manuscript section order, then the order
+// of entries within each section. Use the same order for guided navigation.
+const guidedItems = map.sections.flatMap((sec) => items.filter((it) => it.section === sec.number));
 const itemById = Object.fromEntries(items.map((it) => [it.id, it]));
 
 // Require every theorem-like environment declared with \newtheorem to be
@@ -619,6 +622,9 @@ function reviewBlock(it, hash) {
 }
 
 function card(it) {
+  const guidedIndex = guidedItems.findIndex((entry) => entry.id === it.id);
+  const previous = guidedItems[guidedIndex - 1];
+  const next = guidedItems[guidedIndex + 1];
   const leanInfos = (it.lean ?? []).map((ref) => [resolveLean(ref, it.id), ref.role]);
   const stepInfos = (it.steps ?? []).map((st) => (st.lean ?? []).map((ref) => [resolveLean(ref, it.id), ref.role]));
   const allLeanInfos = [...leanInfos, ...stepInfos.flat()];
@@ -652,6 +658,11 @@ function card(it) {
   const usedBy = items.filter((o) => (o.depends_on ?? []).includes(it.id)).map((o) => `<a href="#item-${slug(o.id)}">${escapeHtml(o.short ?? o.id)}</a>`).join(', ');
   const texLink = it.tex_lines ? `https://github.com/${map.sources.paper.repo}/blob/${map.sources.paper.commit}/${paperFile}#L${it.tex_lines[0]}-L${it.tex_lines[1]}` : null;
   const maxSev = (it.issues ?? []).reduce((acc, iss) => Math.max(acc, SEV[iss.severity]?.rank ?? 0), 0);
+  const guidedNav = `<nav class="guided-claim-nav" aria-label="Paper-order claim navigation">
+    ${previous ? `<a rel="prev" data-guided-visit="${escapeHtml(previous.id)}" href="#item-${slug(previous.id)}">← Previous claim</a>` : '<span class="guided-disabled" aria-disabled="true">First claim</span>'}
+    <span class="guided-position">Paper-order claim ${guidedIndex + 1} of ${guidedItems.length}</span>
+    ${next ? `<a rel="next" data-guided-visit="${escapeHtml(next.id)}" href="#item-${slug(next.id)}">Next claim →</a>` : '<span class="guided-disabled" aria-disabled="true">Last claim</span>'}
+  </nav>`;
   return `<section class="card" id="item-${slug(it.id)}" data-rel="${escapeHtml(it.statement_relation)}" data-route="${escapeHtml(it.route_relation)}" data-sev="${maxSev}" data-review-scope="${escapeHtml(it.review_scope ?? 'publication')}">
   <header class="card-head">
     <h3>${escapeHtml(it.kind ?? '')} ${escapeHtml(it.number ?? '')}${it.title ? ' — ' + mdInline(it.title) : ''}</h3>
@@ -692,6 +703,7 @@ function card(it) {
     it._hash = h;
     return recordedBlock(it.id, h) + reviewBlock(it, h);
   })()}
+  ${guidedNav}
 </section>`;
 }
 
@@ -829,6 +841,7 @@ const html = `<!doctype html>
   </table>
 </header>
 <section id="overview"><p class="publication-target"><b>Max: review the whole current paper–Lean correspondence.</b> Check every mathematical claim, its definitions, hypotheses, sidedness and proof steps, including exact matches. Keep valid paper arguments where checked variants or adapters can support them. Linked readable Lean proofs explain differences; they do not certify a different printed proof. Johanna reviews concrete text proposals. Human acceptance is still required.</p><div id="freshness" class="muted"></div><h2>Overview</h2>
+  ${guidedItems.length ? `<p class="guided-start"><a data-guided-start href="#item-${slug(guidedItems[0].id)}">Start guided review at ${escapeHtml(guidedItems[0].short ?? guidedItems[0].title ?? guidedItems[0].id)}</a> <span class="muted">(${guidedItems.length} claims in paper order)</span> · <a id="guided-resume" data-guided-resume hidden>Resume last visited claim</a></p>` : ''}
   <div class="stats"><div>Statements: ${countBy('statement_relation', REL)}</div><div>Proof routes: ${countBy('route_relation', ROUTE)}</div><div>Issues: ${sevCount}</div><div>Recorded sign-offs (committed, current): ${items.filter((it) => (recorded[it.id] ?? []).some((r) => r.complete && r.hash === it._hash)).length} / ${items.length}</div></div>
   ${md(map.overview)}
   <h3>How to use this document</h3>${md(map.how_to_use)}
