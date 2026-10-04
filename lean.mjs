@@ -196,6 +196,58 @@ export function extractStatement(lines, declLine, maxLines = 45, withBody = fals
   return { text: body.join('\n').replace(/\s+$/, '') + (truncated ? '\n  …' : ''), startLine: start + 1, endLine: end + 1, truncated };
 }
 
+// Extract the complete declaration command for source review. Unlike
+// extractStatement, this deliberately retains the proof term. Lean's command
+// grammar permits arbitrarily long tactic blocks and nested `where` helpers,
+// so use command boundaries and indentation rather than a line-count limit.
+// The parser is intentionally lexical: it does not claim to elaborate or
+// validate the returned source.
+export function extractDeclaration(lines, declLine) {
+  const codeLines = maskLeanCommentsAndStrings(lines.join('\n')).split('\n');
+  const declarationIndent = /^\s*/.exec(codeLines[declLine - 1] ?? '')[0].length;
+  const start = (() => {
+    let k = declLine - 2;
+    while (k >= 0 && /^\s*@\[[^\]]*\]\s*$/.test(codeLines[k])) k--;
+    if (k >= 0 && /-\/\s*$/.test(lines[k])) {
+      let d = k;
+      while (d >= 0 && !/^\s*\/--/.test(lines[d])) d--;
+      if (d >= 0) k = d - 1;
+    }
+    return k + 1;
+  })();
+  const commandStart = (line) => {
+    if (DECL_RE.test(line) || SCOPE_RE.test(line)) return true;
+    // Commands that can follow a declaration at file or namespace scope.
+    // `where` is excluded because it may introduce nested declarations that
+    // are part of the current definition.
+    return /^\s*(?:#\w+|(?:end|open|variable|universe|set_option|local|scoped|attribute|initialize|builtin_initialize|syntax|macro|elab|notation|infixl?|infixr|prefix|postfix|instance|deriving|export|import|prelude)\b)/.test(line);
+  };
+  const attachedStart = (lineIndex) => {
+    let k = lineIndex - 1;
+    while (k >= declLine && /^\s*@\[[^\]]*\]\s*$/.test(codeLines[k])) k--;
+    if (k >= declLine && /-\/\s*$/.test(lines[k])) {
+      let doc = k;
+      while (doc >= declLine && !/^\s*\/--/.test(lines[doc])) doc--;
+      if (doc >= declLine) k = doc - 1;
+    }
+    return k + 1;
+  };
+  let end = lines.length;
+  for (let i = declLine; i < codeLines.length; i++) {
+    const code = codeLines[i];
+    if (!code.trim()) continue;
+    const indent = /^\s*/.exec(code)[0].length;
+    if (indent <= declarationIndent && commandStart(code)) { end = attachedStart(i); break; }
+  }
+  while (end > declLine && !lines[end - 1].trim()) end--;
+  return {
+    text: lines.slice(start, end).join('\n').replace(/\s+$/, ''),
+    startLine: start + 1,
+    endLine: end,
+    truncated: false,
+  };
+}
+
 export function declarationContext(lines, declLine) {
   const code = maskLeanCommentsAndStrings(lines.join('\n')).split('\n');
   const scopes = [{ name: null, declarations: [] }];

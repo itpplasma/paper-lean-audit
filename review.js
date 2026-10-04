@@ -404,7 +404,16 @@
     rememberEntry(id);
   });
   updateResumeLink();
-  document.getElementById('clean-text').addEventListener('change', (event) => document.body.classList.toggle('clean', event.target.checked));
+  if (window.matchMedia('(max-width: 940px)').matches) {
+    const contents = document.querySelector('.contents');
+    if (contents) contents.open = false;
+  }
+  const annotationToggle = document.getElementById('clean-text');
+  if (annotationToggle) {
+    const syncAnnotations = () => document.body.classList.toggle('clean', !annotationToggle.checked);
+    annotationToggle.addEventListener('change', syncAnnotations);
+    syncAnnotations();
+  }
   paint();
   const freshness = document.getElementById('freshness');
   if (freshness && meta.live) {
@@ -423,6 +432,25 @@
       } catch (_) { link.textContent = 'Latest version could not be checked — open the published review'; }
     }
     checkLatest(); setInterval(checkLatest, 120000);
+  }
+})();
+
+// Keep the section navigator oriented as the reader moves through the paper.
+// This does not alter filtering or review state and works without the API.
+(() => {
+  const links = [...document.querySelectorAll('.side [data-toc]')];
+  if (!('IntersectionObserver' in window) || !links.length) return;
+  const byTarget = new Map(links.map((link) => [link.hash.slice(1), link]));
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      for (const link of links) link.removeAttribute('aria-current');
+      byTarget.get(entry.target.id)?.setAttribute('aria-current', 'location');
+    }
+  }, { rootMargin: '-12% 0px -72% 0px' });
+  for (const id of byTarget.keys()) {
+    const target = document.getElementById(id);
+    if (target) observer.observe(target);
   }
 })();
 

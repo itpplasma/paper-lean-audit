@@ -46,6 +46,36 @@ test('inline and display math use matching, escaped delimiters', () => {
   assert.equal((html.match(/class="katex"/g) ?? []).length, 4);
   assert.match(html, /class="katex-display"/);
   assert.doesNotMatch(html, /\$\$|\(u\)|\[v\]/);
+  assert.doesNotMatch(html, /math-(?:clean|annotated)/);
+});
+
+test('math edits provide clean and annotated variants with the intended semantics', () => {
+  const r = renderer();
+  const html = r.text(String.raw`$x + \AIreplace{C}{K} + \AIadd{A} + \AIremove{R} + \AIreplace{D}{\AIremove{T} + \AIadd{B}}$`);
+  assert.equal(r.warnings.length, 0);
+  const cleanAt = html.indexOf('class="math-clean"');
+  const annotatedAt = html.indexOf('class="math-annotated"');
+  assert.ok(cleanAt >= 0 && annotatedAt > cleanAt);
+  const clean = html.slice(cleanAt, annotatedAt);
+  const annotated = html.slice(annotatedAt);
+  // MathML is an independent semantic oracle: the clean variant contains the
+  // accepted expressions, while the annotated variant retains removed text.
+  for (const symbol of ['K', 'A', 'B']) assert.match(clean, new RegExp(`<mi>${symbol}</mi>`));
+  for (const symbol of ['C', 'R', 'D', 'T']) assert.doesNotMatch(clean, new RegExp(`<mi>${symbol}</mi>`));
+  for (const symbol of ['C', 'K', 'A', 'R', 'D', 'T', 'B']) assert.match(annotated, new RegExp(`<mi>${symbol}</mi>`));
+  assert.match(annotated, /<mstyle mathcolor="blue">/);
+  assert.match(annotated, /<mstyle mathcolor="red">/);
+});
+
+test('display math edits retain one equation tag in each variant', () => {
+  const source = String.raw`\begin{equation}\AIreplace{C}{K}=1\tag{7}\end{equation}`;
+  const r = renderer();
+  const html = r.text(source);
+  assert.equal(r.warnings.length, 0);
+  assert.equal((html.match(/class="math-clean"/g) ?? []).length, 1);
+  assert.equal((html.match(/class="math-annotated"/g) ?? []).length, 1);
+  assert.equal((html.match(/class="dmath-tag"/g) ?? []).length, 2);
+  assert.equal((html.match(/\(7\)/g) ?? []).length, 2);
 });
 
 test('unclosed math and environments are visible, warned, and terminate', () => {
@@ -84,6 +114,17 @@ test('nested AI markup carries the source offset and renders nested commands', (
   const listEquation = listSource.indexOf(String.raw`\begin{equation}`);
   const listed = renderer({ eqAuto: new Map([[listEquation, '7']]) }).text(listSource);
   assert.match(listed, /<ul><li>.*7/s);
+});
+
+test('Lean source links shorten labels and retain exact names and pinned URLs', () => {
+  const declaration = 'Stafford38.Geometry.GeneralCoisotropicExclusion.exists_zero_base_coordinate';
+  const file = 'Stafford38/Geometry/GeneralCoisotropicExclusion.lean';
+  const url = `https://github.com/itpplasma/stafford38-formal/blob/${'a'.repeat(40)}/${file}#L84-L97`;
+  const key = ['leandecl', file, '84', declaration].join('\0');
+  const r = renderer({ leanRefs: new Map([[key, url]]) });
+  const html = r.text(String.raw`\leandecl{Stafford38/Geometry/GeneralCoisotropicExclusion.lean}{84}{Stafford38.Geometry.GeneralCoisotropicExclusion.exists_zero_base_coordinate}`);
+  assert.equal(html, `<a class="lean-source" href="${url}" title="${declaration}"><code>GeneralCoisotropicExclusion.exists_zero_base_coordinate</code></a>`);
+  assert.equal(r.warnings.length, 0);
 });
 
 test('hyperref preserves its display text and only links local anchors', () => {

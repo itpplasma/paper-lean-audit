@@ -145,8 +145,8 @@ test('check audits current manuscript links, statement coverage, pins, and secti
   assert.match(html, /1\.1/);
   assert.match(html, /1\.2/);
   assert.match(html, /2\.1/);
-  assert.match(html, /data-guided-start href="#item-thm">Start guided review/);
-  assert.match(html, /Paper-order claim 1 of 2/);
+  assert.match(html, /data-guided-start href="#item-thm">Begin reading/);
+  assert.match(html, /1 \/ 2/);
   assert.match(html, /data-guided-visit="def" href="#item-def">Next claim/);
   assert.match(html, /data-guided-visit="thm" href="#item-thm">← Previous claim/);
   assert.match(html, /id="guided-resume" data-guided-resume hidden/);
@@ -376,7 +376,7 @@ test('a changed review-scope module makes earlier human approval stale', (t) => 
   assert.doesNotMatch(html, /<span class="ok-tag">signed off<\/span>/);
 });
 
-test('theorem cards show named propositions and full proof-step signatures', (t) => {
+test('theorem cards show named propositions and complete proof bodies', (t) => {
   const f = fixture(t);
   fs.writeFileSync(path.join(f.formal.repo, 'Target.lean'), [
     'namespace Foo',
@@ -395,12 +395,14 @@ test('theorem cards show named propositions and full proof-step signatures', (t)
   const result = f.run();
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const html = fs.readFileSync(f.htmlPath, 'utf8');
-  assert.match(html, /Definitions used in theorem statements/);
+  assert.match(html, /More Lean proofs and definitions/);
   assert.match(html, /∀<\/span> n : Nat, <span class="lo">∃<\/span> m : Nat, m = n \+ 1/);
   assert.match(html, /Target\.lean#L2-L3/);
-  assert.match(html, /Lean declarations for the proof steps/);
+  assert.match(html, /Proof step/);
   assert.match(html, /theorem<\/span> helper : True :=/);
-  assert.doesNotMatch(html, /intro n|exact ⟨n \+ 1/);
+  assert.match(html, /intro n/);
+  assert.match(html, /exact ⟨n \+ 1/);
+  assert.match(html, /Target\.lean#L5-L7/);
 });
 
 test('changing review criterion wording invalidates the prior card digest', (t) => {
@@ -467,13 +469,13 @@ test('duplicate FQNs in separate modules cannot silently replace a predicate sou
   let result = f.run(); assert.equal(result.status, 0, result.stdout + result.stderr);
   let html = fs.readFileSync(f.htmlPath, 'utf8');
   let card = html.split('id="item-thm"')[1].split('</section>')[0];
-  assert.match(card, /Named result <code>P<\/code> is not expanded/);
+  assert.match(card, /Definition P ↗/);
   assert.doesNotMatch(card, /def<\/span> P : Prop := False/);
   f.map.items[0].lean[0].expands = [{ file: 'Alpha.lean', name: 'Foo.P', line: 2 }];
   result = f.run(); assert.equal(result.status, 0, result.stdout + result.stderr);
   html = fs.readFileSync(f.htmlPath, 'utf8');
   card = html.split('id="item-thm"')[1].split('</section>')[0];
-  assert.match(card, /Alpha\.lean#L2/); assert.doesNotMatch(card, /Named result <code>P<\/code> is not expanded/);
+  assert.match(card, /Alpha\.lean#L2/); assert.doesNotMatch(card, /Definition P ↗/);
 });
 
 test('excerpt checks catch cut markup and preserve a proposed replacement excerpt', (t) => {
@@ -499,8 +501,8 @@ test('unproved goal templates are labeled rather than presented as proved result
   f.map.items[0].lean=[{file:'Goal.lean',name:'Foo.goal',line:2,role:'statement'}];
   const result=f.run();assert.equal(result.status,0,result.stdout+result.stderr);
   const html=fs.readFileSync(f.htmlPath,'utf8');
-  assert.match(html,/Unproved challenge\/template/);
-  assert.match(html,/Target specification or assumption only/);
+  assert.match(html,/Challenge statement · unproved template/);
+  assert.match(html,/\bsorry\b/);
 });
 
 test('a child excerpt of replacement text keeps proposal styling and original source offsets', (t) => {

@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TexRenderer, escapeHtml, stripComments, readGroup } from './texhtml.mjs';
-import { findDeclaration, extractStatement, highlightLean, namedResultType, definitionNames, declarationContext, bindingNames, declarationTrust } from './lean.mjs';
+import { findDeclaration, extractStatement, extractDeclaration, highlightLean, namedResultType, definitionNames, declarationContext, bindingNames, declarationTrust } from './lean.mjs';
 import { reviewScopeOptions } from './review-scope.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -341,16 +341,17 @@ function resolveLean(ref, userId) {
     }
     if (ref.line && ref.line !== found.line) warnings.push(`Lean: ${ref.name} is at line ${found.line}, map says ${ref.line}`);
     const st = extractStatement(found.lines, found.line, 160, ['def', 'abbrev', 'structure', 'class', 'inductive'].includes(found.keyword));
+    const full = extractDeclaration(found.lines, found.line);
     const context = declarationContext(found.lines, found.line).map((entry) => ({ ...entry, url: ghBlob(repoKey, ref.file, entry.startLine, entry.endLine) }));
     info = { ...info, ok: found.exact && (found.exported !== false || explicitlyInternal), exported: found.exported,
       private: found.exported === false,
       visibility: found.visibility, line: found.line, qualified: found.qualified, keyword: found.keyword,
-      statement: st.text, truncated: st.truncated,
+      statement: st.text, truncated: st.truncated, declaration: full.text, declarationLines: [full.startLine, full.endLine],
       resultType: ['theorem', 'lemma'].includes(found.keyword) ? namedResultType(found.lines, found.line) : null,
       context,
       bindings: [...new Set([...bindingNames(st.text), ...context.filter((entry) => /^\s*variable\b/.test(entry.text)).flatMap((entry) => bindingNames(entry.text))])],
       trust: declarationTrust(found.lines, found.line, found.keyword),
-      stLines: [st.startLine, st.endLine], url: ghBlob(repoKey, ref.file, st.startLine, st.endLine) };
+      stLines: [st.startLine, st.endLine], url: ghBlob(repoKey, ref.file, full.startLine, full.endLine) };
   }
   info.sourceHash = crypto.createHash('sha256').update(text).digest('hex');
   info.sourceCommit = map.sources[repoKey].commit;
@@ -554,21 +555,15 @@ function symbolLink(info, token) {
   return exactLink(definitionRefs.filter((ref) => ref.name === lookup));
 }
 function leanBlock(info, role) {
-  if (!info.url) return `<div class="lean missing">✗ ${escapeHtml(info.name ?? info.file)} — not resolved</div>`;
-  const repoTag = ({ library: 'AlgebraicAnalysis', global: 'GlobalStafford', mathlib: 'Mathlib' })[info.repo] ?? map.sources[info.repo]?.repo ?? info.repo;
+  if (!info.url) return `<div class="lean missing">${escapeHtml(info.name ?? info.file)} — source unavailable</div>`;
   const anchor = `lean-${slug(leanIndexKey(info))}`;
-  const head = info.module_only
-    ? `<a class="lean-name" href="${info.url}">${escapeHtml(info.file)}</a> <span class="muted">(module)</span>`
-    : `<a class="lean-name" href="${info.url}">${escapeHtml(info.name)}</a>`;
-  return `<div class="lean">
-    <div class="lean-head">${role ? `<span class="role">${escapeHtml(role)}</span>` : ''}${head}${info.private ? ' <span class="muted">(module-private; not an exported FQN)</span>' : ''}
-      <span class="muted"> · ${repoTag} @ ${escapeHtml(info.sourceCommit?.slice(0, 7) ?? '')} · ${escapeHtml(info.file)}:${info.line ?? 1}</span>
-      <a class="xref" href="#${anchor}" title="All paper items using this declaration">⇄</a></div>
-    ${info.statement ? `<pre class="lean-src">${highlightLean(info.statement, (token) => symbolLink(info, token))}</pre>` : ''}
-    ${info.trust === 'placeholder' ? '<p class="err">Unproved challenge/template: this declaration contains sorry/admit. Its signature specifies a target; it is not evidence of a proved theorem.</p>' : info.trust === 'axiom' ? '<p class="err">Axiom declaration: this is an assumption, not a proved theorem.</p>' : ''}
-    ${info.context?.length ? `<details class="lean-context"><summary>Ambient source declarations</summary><p class="muted">Available local context, not a list of extra hypotheses. Lean determines parameters from the signature, proof and include/omit directives. Imports and other instances are in the linked full module.</p>${info.context.map((entry) => `<a href="${entry.url}" class="muted">${escapeHtml(info.file)}:${entry.startLine}–${entry.endLine}</a><pre class="lean-src">${highlightLean(entry.text)}</pre>`).join('')}</details>` : ''}
-    ${info.truncated ? '<p class="lean-note">Excerpt truncated; follow the pinned source link for the complete declaration.</p>' : ''}
-    ${info.note ? `<div class="lean-note">${md(info.note)}</div>` : ''}
+  const name = escapeHtml(info.module_only ? info.file : info.name);
+  const displayName = escapeHtml(info.module_only ? info.file : info.name.split('.').slice(-2).join('.'));
+  return `<div class="lean" data-declaration="${escapeHtml(info.name ?? info.file)}">
+    <div class="lean-head"><a class="lean-name source-link" href="${info.url}" title="${name}">${displayName} ↗</a><a class="xref" href="#${anchor}" title="Other paper passages using this declaration" aria-label="Other paper passages using ${name}">⇄</a></div>
+    ${info.declaration || info.statement ? `<pre class="lean-src">${highlightLean(info.declaration ?? info.statement, (token) => symbolLink(info, token))}</pre>` : ''}
+    ${info.trust === 'placeholder' ? '<p class="err">Challenge statement · unproved template</p>' : info.trust === 'axiom' ? '<p class="err">Axiom</p>' : ''}
+    ${info.context?.length ? `<details class="lean-context"><summary>Variables and notation</summary>${info.context.map((entry) => `<a href="${entry.url}" class="source-link">Source ↗</a><pre class="lean-src">${highlightLean(entry.text)}</pre>`).join('')}</details>` : ''}
   </div>`;
 }
 
@@ -613,8 +608,8 @@ function recordedBlock(id, hash) {
 }
 function reviewBlock(it, hash) {
   return `<div class="review" data-item="${escapeHtml(it.id)}" data-hash="${hash}">
-    <div class="stale-note">Earlier sign-off was made against different paper text or Lean statements; re-check.</div>
-    <div class="review-title">Human review</div>
+    <div class="stale-note">This review needs updating.</div>
+
     ${reviewChecks.map((c) => `<label><input type="checkbox" data-check="${c.id}"> ${escapeHtml(c.label)}</label>`).join('')}
     <textarea placeholder="Reviewer notes" data-notes></textarea>
     <div class="print-only signoff">Reviewer: ______________________ &nbsp; Date: ____________ &nbsp; Verdict: ☐ agree ☐ disagree ☐ needs change</div>
@@ -622,6 +617,8 @@ function reviewBlock(it, hash) {
 }
 
 function card(it) {
+  const heading = it.title && it.title.toLowerCase() === (it.kind ?? '').toLowerCase()
+    ? mdInline(it.title) : `${escapeHtml(it.kind ?? '')} ${escapeHtml(it.number ?? '')}${it.title ? ' — ' + mdInline(it.title) : ''}`;
   const guidedIndex = guidedItems.findIndex((entry) => entry.id === it.id);
   const previous = guidedItems[guidedIndex - 1];
   const next = guidedItems[guidedIndex + 1];
@@ -635,23 +632,23 @@ function card(it) {
     if (shownNames.has(key)) return false;
     shownNames.add(key); return true;
   });
-  const theoremInfos = allLeanInfos.filter(([info]) => ['theorem', 'lemma'].includes(info.keyword));
   const primary = leanInfos.filter(([, role]) => role !== 'helper');
-  const coverage = it.lean_explanation ?? (!allLeanInfos.length
-    ? 'No Lean declaration is mapped to this passage; the paper text is not certified by this card.'
-    : allLeanInfos.every(([info]) => info.module_only)
-      ? 'Source/documentation links only: no theorem signature is mapped to this passage.'
-    : primary.some(([info]) => ['placeholder', 'axiom'].includes(info.trust)) && !primary.some(([info]) => ['theorem', 'lemma'].includes(info.keyword) && info.trust === 'source declaration')
-      ? 'Target specification or assumption only: the mapped declaration does not provide a proved theorem here.'
-    : !theoremInfos.length
-      ? 'Definitions and notation only: this card does not display a proved theorem for the passage.'
-      : !primary.some(([info]) => ['theorem', 'lemma'].includes(info.keyword))
-        ? 'The main display gives statement definitions; the proved results are shown under supporting declarations or proof steps below.'
-        : 'The theorem signatures below state the mapped results. Named statement definitions are displayed separately when available; proof bodies are linked in the pinned source.');
+  const visible = primary.length <= 3 ? primary : primary.filter(([, role]) => role === 'statement').slice(0, 2);
+  if (primary.length > 3) {
+    const proof = primary.find(([info, role]) => role === 'main-proof' && !visible.some(([shown]) => leanIndexKey(shown) === leanIndexKey(info)));
+    if (proof) visible.push(proof);
+    if (!visible.length) visible.push(...primary.slice(0, 2));
+  }
+  const displayed = new Set(visible.map(([info]) => leanIndexKey(info)));
+  const more = [...allLeanInfos, ...definitions.map((info) => [info, 'definition'])].filter(([info]) => {
+    const key = leanIndexKey(info);
+    if (displayed.has(key)) return false;
+    displayed.add(key); return true;
+  });
   const stepRows = (it.steps ?? []).map((st, k) => {
     const infos = stepInfos[k];
     return `<tr><td class="step-n">${k + 1}</td><td><b>${escapeHtml(st.title)}</b>${st.tex_lines ? ` <span class="muted">tex ${st.tex_lines[0]}–${st.tex_lines[1]}</span>` : ''}
-      ${st.relation ? badge(ROUTE, st.relation, 'route') : ''}<div>${md(st.note)}</div></td>
+      ${st.relation ? badge(ROUTE, st.relation, 'route') : ''}</td>
       <td>${infos.map(([info]) => info.url ? `<a href="${info.url}">${escapeHtml(info.module_only ? info.file : info.name)}</a>${info.private ? ' <span class="muted">(module-private; not an exported FQN)</span>' : ''}` : `<span class="err">${escapeHtml(info.name)}</span>`).join('<br>') || '<span class="muted">—</span>'}</td></tr>`;
   }).join('');
   const deps = (it.depends_on ?? []).map((d) => `<a href="#item-${slug(d)}">${escapeHtml(itemById[d]?.short ?? d)}</a>`).join(', ');
@@ -660,41 +657,31 @@ function card(it) {
   const maxSev = (it.issues ?? []).reduce((acc, iss) => Math.max(acc, SEV[iss.severity]?.rank ?? 0), 0);
   const guidedNav = `<nav class="guided-claim-nav" aria-label="Paper-order claim navigation">
     ${previous ? `<a rel="prev" data-guided-visit="${escapeHtml(previous.id)}" href="#item-${slug(previous.id)}">← Previous claim</a>` : '<span class="guided-disabled" aria-disabled="true">First claim</span>'}
-    <span class="guided-position">Paper-order claim ${guidedIndex + 1} of ${guidedItems.length}</span>
+    <span class="guided-position">${guidedIndex + 1} / ${guidedItems.length}</span>
     ${next ? `<a rel="next" data-guided-visit="${escapeHtml(next.id)}" href="#item-${slug(next.id)}">Next claim →</a>` : '<span class="guided-disabled" aria-disabled="true">Last claim</span>'}
   </nav>`;
   return `<section class="card" id="item-${slug(it.id)}" data-rel="${escapeHtml(it.statement_relation)}" data-route="${escapeHtml(it.route_relation)}" data-sev="${maxSev}" data-review-scope="${escapeHtml(it.review_scope ?? 'publication')}">
   <header class="card-head">
-    <h3>${escapeHtml(it.kind ?? '')} ${escapeHtml(it.number ?? '')}${it.title ? ' — ' + mdInline(it.title) : ''}</h3>
-    <div class="meta">
-      ${it.label ? `<code>${escapeHtml(it.label)}</code> · ` : ''}${it.pdf_page ? `PDF p.&nbsp;${it.pdf_page} · ` : ''}${texLink ? `<a href="${texLink}">tex ${it.tex_lines[0]}–${it.tex_lines[1]}</a>` : ''}
-    </div>
-    <div class="badges">${badge(REL, it.statement_relation, 'statement')} ${badge(ROUTE, it.route_relation, 'route')}
-      ${(it.issues ?? []).length ? `<span class="badge b-${SEV[Object.keys(SEV).find((k) => SEV[k].rank === maxSev)]?.color ?? 'grey'}">${it.issues.length} issue${it.issues.length > 1 ? 's' : ''}</span>` : ''}</div>
+    <h3>${heading}</h3>
   </header>
-  ${it.publication_proof ? `<div class="publication-target"><b>Proof correspondence.</b> ${md(it.publication_proof)}<span class="muted">Compare the whole printed proof, including its intermediate claims. A different checked route is a comparison aid, not approval of the printed argument.</span></div>` : ''}
   <div class="cols">
     <div class="col paper">
-      <div class="col-title">Paper <span class="muted">(${escapeHtml(paperFile)} @ ${map.sources.paper.commit.slice(0, 7)})</span></div>
-      <div class="tex">${it.tex_lines ? excerpt(it.publication_tex_lines ?? it.tex_lines) : '<p class="muted">No manuscript text (Lean-only step).</p>'}${it.publication_tex_lines ? `<details><summary>Full printed proof — included in correspondence review</summary>${excerpt(it.tex_lines)}</details>` : ''}</div>
+      <div class="col-title">Paper ${texLink ? `<a class="source-link" href="${texLink}">Source ↗</a>` : ''}</div>
+      <div class="tex">${it.tex_lines ? excerpt(it.tex_lines) : '<p class="muted">No paper passage.</p>'}</div>
     </div>
     <div class="col formal">
-      <div class="col-title">Lean <span class="muted">(repository and pinned revision on each declaration)</span></div>
-      <p class="lean-coverage">${escapeHtml(coverage)}</p>
-      ${leanInfos.length ? leanInfos.filter(([, role]) => role !== 'helper').map(([info, role]) => leanBlock(info, role)).join('') : `<p class="none">${stepInfos.flat().length ? 'See the Lean declarations for the proof steps below.' : 'No Lean counterpart is mapped.'}</p>`}
-      ${leanInfos.some(([, role]) => role === 'helper') ? `<details class="helpers"><summary>Supporting declarations (full signatures)</summary>${leanInfos.filter(([, role]) => role === 'helper').map(([info, role]) => leanBlock(info, role)).join('')}</details>` : ''}
-      ${definitions.length ? `<div class="statement-definitions"><div class="col-title">Definitions used in theorem statements</div>${definitions.map((info) => leanBlock(info, 'statement definition')).join('')}</div>` : ''}
-      ${expansions.filter((entry) => entry.unavailable).map((entry) => `<p class="lean-note">Named result <code>${escapeHtml(entry.unavailable)}</code> is not expanded here: its definition could not be resolved in the mapped files. Follow ${entry.info.url ? `<a href="${entry.info.url}">${escapeHtml(entry.info.name)}</a>` : escapeHtml(entry.info.name)} for its source and imports.</p>`).join('')}
+      <div class="col-title">Lean</div>
+      ${visible.length ? visible.map(([info, role]) => leanBlock(info, role)).join('') : '<p class="none">No corresponding declaration.</p>'}
+      ${more.length ? `<details class="helpers"><summary>More Lean proofs and definitions</summary>${more.map(([info, role]) => leanBlock(info, role)).join('')}</details>` : ''}
+      ${expansions.filter((entry) => entry.unavailable).map((entry) => `<a class="unexpanded-definition source-link" href="${entry.info.url}">Definition ${escapeHtml(entry.unavailable)} ↗</a>`).join('')}
     </div>
   </div>
-  <div class="assess">
-    ${it.correspondence ? `<div class="corr"><b>Statement correspondence.</b> ${md(it.correspondence)}</div>` : ''}
-    ${it.route ? `<div class="corr"><b>Proof route.</b> ${md(it.route)}</div>` : ''}
+  <details class="assess"><summary>Comparison notes</summary>
+    <div class="badges">${badge(REL, it.statement_relation, 'statement')} ${badge(ROUTE, it.route_relation, 'route')}</div>
     ${stepRows ? `<table class="steps"><thead><tr><th>#</th><th>Proof step</th><th>Lean</th></tr></thead><tbody>${stepRows}</tbody></table>` : ''}
-    ${stepInfos.flat().length ? `<details class="step-statements"><summary>Lean declarations for the proof steps</summary>${stepInfos.flat().map(([info, role]) => leanBlock(info, role)).join('')}</details>` : ''}
-    ${(it.issues ?? []).length ? `<div class="issues-title">Issues</div><ul class="issues">${it.issues.map((iss) => issueBlock(iss, it.id)).join('')}</ul>` : ''}
     <div class="deps">${deps ? `Uses: ${deps}` : ''}${deps && usedBy ? ' · ' : ''}${usedBy ? `Used by: ${usedBy}` : ''}</div>
-  </div>
+  </details>
+  <details class="review-panel"><summary>Review notes</summary>
   ${(() => {
     const paperText = it.tex_lines ? texLines.slice(it.tex_lines[0] - 1, it.tex_lines[1]).join('\n') : '';
     const reviewBasis = [Object.fromEntries(Object.entries(map.sources).map(([key, source]) => [key, source.commit])),
@@ -703,6 +690,7 @@ function card(it) {
     it._hash = h;
     return recordedBlock(it.id, h) + reviewBlock(it, h);
   })()}
+  </details>
   ${guidedNav}
 </section>`;
 }
@@ -756,7 +744,6 @@ const challengeEndpoints = (map.challenge_endpoints ?? []).map((ref) => leanBloc
 const sectionHtml = map.sections.map((sec) => {
   const secItems = items.filter((it) => it.section === sec.number);
   return `<div class="paper-section" id="sec-${escapeHtml(sec.number)}"><h2>${escapeHtml(sec.number)}. ${escapeHtml(sec.title)}</h2>
-    ${sec.note ? `<div class="sec-note">${md(sec.note)}</div>` : ''}
     ${secItems.map(card).join('\n')}</div>`;
 }).join('\n');
 for (const it of items) if (!map.sections.some((s) => s.number === it.section)) errors.push(`item ${it.id} has unknown section ${it.section}`);
@@ -804,63 +791,41 @@ const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stafford 3.8 paper–Lean audit</title>
 <style>${katexCss}</style><style>${css}</style></head>
-<body>
-<nav class="side">
-  <div class="brand">Stafford 3.8<br><span>paper ↔ Lean audit</span></div>
-  <label for="review-scope">Review scope</label><select id="review-scope">${reviewScopeOptions(items)}</select>
-  <input id="filter" type="search" placeholder="Filter cards…">
-  <div class="filters">
-    <label><input type="checkbox" id="only-issues"> with issues</label>
-    <label><input type="checkbox" id="only-open"> not yet signed off</label>
-    <label><input type="checkbox" id="clean-text"> hide AI markup</label>
-  </div>
-  <ol class="toc">
-    <li><a href="#overview">Overview</a></li><li><a href="#graph">Dependency map</a></li>${challengeDefinitions ? '<li><a href="#challenge-definitions">Challenge definitions</a></li>' : ''}
+<body class="clean">
+<nav class="side" aria-label="Contents">
+  <a class="brand" href="#overview">Stafford 3.8<span>Paper &amp; Lean</span></a>
+  <input id="filter" type="search" placeholder="Find a claim…" aria-label="Find a claim">
+  <details class="contents" open><summary>Contents</summary><ol class="toc">
     ${map.sections.map((sec) => `<li><a href="#sec-${escapeHtml(sec.number)}">${escapeHtml(sec.number)}. ${escapeHtml(sec.title)}</a><ol>${items.filter((it) => it.section === sec.number).map((it) => `<li><a href="#item-${slug(it.id)}" data-toc="${escapeHtml(it.id)}">${escapeHtml(it.short ?? it.id)}</a></li>`).join('')}</ol></li>`).join('')}
-    <li><a href="#lean-only">Lean-only steps</a></li><li><a href="#issues">Issue register</a></li>
-    <li><a href="#aicomments">AI comments</a></li><li><a href="#lean-index">Lean → paper index</a></li><li><a href="#provenance">Provenance</a></li>
-  </ol>
-  <div class="review-tools">
+  </ol></details>
+  <details class="review-controls"><summary>Review tools</summary><div class="review-tools">
+    <input id="reviewer" placeholder="Reviewer name" aria-label="Reviewer name">
     <div id="progress"></div>
-    <button id="export">Export review JSON</button>
-    <label class="btn">Import review JSON<input type="file" id="import" accept="application/json" hidden></label>
-    <input id="reviewer" placeholder="Reviewer name">
-  </div>
+    <button id="export">Export notes</button>
+    <label class="btn">Import notes<input type="file" id="import" accept="application/json" hidden></label>
+    <label for="review-scope">Claims</label><select id="review-scope">${reviewScopeOptions(items)}</select>
+    <div class="filters">
+      <input type="checkbox" id="only-issues" hidden>
+      <label><input type="checkbox" id="only-open"> Not reviewed</label>
+      <label><input type="checkbox" id="clean-text"> Manuscript annotations</label>
+    </div>
+  </div></details>
 </nav>
 <main>
-<header class="doc-head">
-  <h1>${escapeHtml(map.title)}</h1>
-  <p class="sub">${escapeHtml(map.subtitle)}</p>
-  <table class="pins">
-    <tr><th>Paper</th><td><a href="https://github.com/${src.paper.repo}/blob/${src.paper.commit}/${paperFile}">${escapeHtml(src.paper.repo)}/${escapeHtml(paperFile)}</a> @ <code>${src.paper.commit.slice(0, 12)}</code> ${escapeHtml(src.paper.note ?? '')}</td></tr>
-    <tr><th>Lean</th><td><a href="https://github.com/${src.formal.repo}/tree/${src.formal.commit}">${escapeHtml(src.formal.repo)}</a> @ <code>${src.formal.commit.slice(0, 12)}</code> ${escapeHtml(src.formal.note ?? '')}</td></tr>
-    ${src.library ? `<tr><th>Library</th><td><a href="https://github.com/${src.library.repo}/tree/${src.library.commit}">${escapeHtml(src.library.repo)}</a> @ <code>${src.library.commit.slice(0, 12)}</code> ${escapeHtml(src.library.note ?? '')}</td></tr>` : ''}
-    ${src.global ? `<tr><th>GlobalStafford</th><td><a href="https://github.com/${src.global.repo}/tree/${src.global.commit}">${escapeHtml(src.global.repo)}</a> @ <code>${src.global.commit.slice(0, 12)}</code> ${escapeHtml(src.global.note ?? '')}</td></tr>` : ''}
-    ${src.mathlib ? `<tr><th>Mathlib</th><td><a href="https://github.com/${src.mathlib.repo}/tree/${src.mathlib.commit}">${escapeHtml(src.mathlib.repo)}</a> @ <code>${src.mathlib.commit.slice(0, 12)}</code> ${escapeHtml(src.mathlib.note ?? '')}</td></tr>` : ''}
-    <tr><th>Build</th><td>generated ${buildInfo.generated} by <code>paper-lean-audit</code> · mapping checks: ${errors.length ? `<b class="err">${errors.length} errors</b>` : 'all passed'} · ${warnings.length} warnings</td></tr>
-  </table>
+<header class="doc-head" id="overview">
+  <h1>Stafford’s Conjecture 3.8</h1>
+  <p class="sub">Paper &amp; Lean proof</p>
+  <div class="reader-links"><a href="./human_readable_main.pdf">Paper PDF ↗</a><a href="./lean_proof_details.pdf">Proof details PDF ↗</a></div>
+  ${guidedItems.length ? `<div class="guided-start"><a data-guided-start href="#item-${slug(guidedItems[0].id)}">Begin reading →</a><a id="guided-resume" data-guided-resume hidden>Continue reading →</a></div>` : ''}
 </header>
-<section id="overview"><p class="publication-target"><b>Max: review the whole current paper–Lean correspondence.</b> Check every mathematical claim, its definitions, hypotheses, sidedness and proof steps, including exact matches. Keep valid paper arguments where checked variants or adapters can support them. Linked readable Lean proofs explain differences; they do not certify a different printed proof. Johanna reviews concrete text proposals. Human acceptance is still required.</p><div id="freshness" class="muted"></div><h2>Overview</h2>
-  ${guidedItems.length ? `<p class="guided-start"><a data-guided-start href="#item-${slug(guidedItems[0].id)}">Start guided review at ${escapeHtml(guidedItems[0].short ?? guidedItems[0].title ?? guidedItems[0].id)}</a> <span class="muted">(${guidedItems.length} claims in paper order)</span> · <a id="guided-resume" data-guided-resume hidden>Resume last visited claim</a></p>` : ''}
-  <div class="stats"><div>Statements: ${countBy('statement_relation', REL)}</div><div>Proof routes: ${countBy('route_relation', ROUTE)}</div><div>Issues: ${sevCount}</div><div>Recorded sign-offs (committed, current): ${items.filter((it) => (recorded[it.id] ?? []).some((r) => r.complete && r.hash === it._hash)).length} / ${items.length}</div></div>
-  ${md(map.overview)}
-  <h3>How to use this document</h3>${md(map.how_to_use)}
-  <h3>Legend</h3>
-  <table class="legend"><tr><th colspan="2">Statement relation (paper vs Lean)</th></tr>${Object.values(REL).map((v) => `<tr><td><span class="badge b-${v.color}">${escapeHtml(v.label)}</span></td><td>${escapeHtml(v.meaning)}</td></tr>`).join('')}
-  <tr><th colspan="2">Proof-route relation</th></tr>${Object.values(ROUTE).map((v) => `<tr><td><span class="badge b-${v.color}">${escapeHtml(v.label)}</span></td><td>${escapeHtml(v.meaning)}</td></tr>`).join('')}
-  <tr><th colspan="2">Issue severity</th></tr>${Object.values(SEV).map((v) => `<tr><td><span class="badge b-${v.color}">${escapeHtml(v.label)}</span></td><td>${escapeHtml(v.meaning)}</td></tr>`).join('')}</table>
-</section>
-<section id="graph" data-reference-material><h2>Dependency map</h2><p class="muted">Arrows point from an input to the item that uses it. Colour = statement relation. Click a node.</p>${depGraph()}</section>
-${challengeDefinitions ? `<section id="challenge-definitions"><h2>Challenge: meaning and soundness</h2><p>Start here: check the quantified fields, characteristic, rank, nonzero input, Weyl relations and factor order against the paper. <code>Field</code> is a typeclass of commutative fields; <code>CharZero</code> requires injective natural-number casts. Definitions specify the proposition; only the proved solution endpoints supply evidence. The deliberate <code>sorry</code> in each challenge template is not a proof. Click linked identifiers in signatures to open their exact pinned definitions. Library parents and imports remain accessible in the pinned source.</p>${challengeEndpoints}<details><summary>Definitions entering the challenge and fixed-source strengthening</summary>${challengeDefinitions}</details></section>` : ''}
 ${sectionHtml}
-<section id="lean-only" data-reference-material><h2>Lean-only steps</h2>${md(map.lean_only_intro)}<table class="reg fixed"><colgroup><col style="width:34%"><col style="width:48%"><col style="width:18%"></colgroup><thead><tr><th>Lean</th><th>What it does and why a reviewer should know</th><th>Nearest paper item</th></tr></thead><tbody>${leanOnly}</tbody></table></section>
-<section id="issues" data-reference-material><h2>Issue register</h2><table class="reg fixed"><colgroup><col style="width:9%"><col style="width:7%"><col style="width:11%"><col style="width:61%"><col style="width:12%"></colgroup><thead><tr><th>Severity</th><th>ID</th><th>Item</th><th>Summary</th><th>AIcomment</th></tr></thead><tbody>${issueTable}</tbody></table></section>
-<section id="aicomments" data-reference-material><h2>AI comments in the manuscript</h2><table class="reg"><thead><tr><th>ID</th><th>tex line</th><th>Audit verdict</th><th>Note</th></tr></thead><tbody>${aicRows}</tbody></table></section>
-<section id="lean-index" data-reference-material><h2>Lean → paper index</h2><p class="muted">Every declaration or module cited in this document, with the paper items that use it. The ⇄ link on each Lean block lands here.</p><table class="reg fixed"><colgroup><col style="width:45%"><col style="width:25%"><col style="width:30%"></colgroup><thead><tr><th>Declaration</th><th>Location</th><th>Paper items</th></tr></thead><tbody>${leanIndexRows}</tbody></table></section>
-<section id="provenance"><h2>Provenance and mapping checks</h2>${md(map.provenance)}
-  <h3>Automatic checks</h3>${errors.length ? `<ul class="err">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('')}</ul>` : '<p>All mapping checks passed: every cited declaration was found under its fully qualified name at the pinned commit, every label lies in its excerpt, and every reference resolved.</p>'}
-  ${warnings.length ? `<details><summary>${warnings.length} warnings</summary><ul>${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}</ul></details>` : ''}
-</section>
+<details class="reference-material"><summary>Definitions and references</summary>
+${challengeDefinitions ? `<section id="challenge-definitions"><h2>Challenge definitions</h2>${challengeEndpoints}<details><summary>Definitions</summary>${challengeDefinitions}</details></section>` : ''}
+<section id="graph" data-reference-material><h2>Dependency map</h2>${depGraph()}</section>
+<section id="lean-only" data-reference-material><h2>Additional Lean results</h2><table class="reg"><thead><tr><th>Lean</th><th>Result</th><th>Paper</th></tr></thead><tbody>${leanOnly}</tbody></table></section>
+<section id="lean-index" data-reference-material><h2>Declaration index</h2><table class="reg"><thead><tr><th>Declaration</th><th>Source</th><th>Paper</th></tr></thead><tbody>${leanIndexRows}</tbody></table></section>
+</details>
+<footer><a href="./manifest.json">Sources</a><a href="https://github.com/itpplasma/stafford38-supplementary">Repository ↗</a></footer>
 </main>
 <script>window.AUDIT_META = ${JSON.stringify({ version: map.version, paper: src.paper.commit, formal: src.formal.commit, checks: reviewChecks.map((c) => c.id), generator: generatorHash, live: liveUrl })};</script>
 <script>${js}</script>

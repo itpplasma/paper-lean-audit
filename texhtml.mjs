@@ -111,32 +111,39 @@ function findEnd(s, i, env) {
   return [-1, -1];
 }
 
-function expandMathEdits(source, depth = 0) {
-  if (depth > 100) return source;
+function transformMathEdits(source, variant, depth = 0) {
+  if (depth > 100) return { source, changed: false };
   const re = /\\AI(add|remove|replace)\b/g;
   let command = null;
   for (let m; (m = re.exec(source));) {
     if (!isEscaped(source, m.index)) { command = m; break; }
   }
-  if (!command) return source;
+  if (!command) return { source, changed: false };
   let cursor = command.index + command[0].length;
   const [oldText, afterOld] = readGroup(source, cursor);
-  if (oldText === null || afterOld <= cursor || source[afterOld - 1] !== '}') return source;
+  if (oldText === null || afterOld <= cursor || source[afterOld - 1] !== '}') return { source, changed: false };
   cursor = afterOld;
   let newText = null;
   if (command[1] === 'replace') {
     const [value, afterNew] = readGroup(source, cursor);
-    if (value === null || afterNew <= cursor || source[afterNew - 1] !== '}') return source;
+    if (value === null || afterNew <= cursor || source[afterNew - 1] !== '}') return { source, changed: false };
     newText = value;
     cursor = afterNew;
   }
-  const oldMath = `\\textcolor{blue}{\\cancel{${expandMathEdits(oldText, depth + 1)}}}`;
-  const replacement = command[1] === 'add'
-    ? `\\textcolor{red}{${expandMathEdits(oldText, depth + 1)}}`
-    : command[1] === 'remove'
-      ? oldMath
-      : `${oldMath}\\,\\textcolor{red}{${expandMathEdits(newText, depth + 1)}}`;
-  return expandMathEdits(source.slice(0, command.index) + replacement + source.slice(cursor), depth + 1);
+  const oldPart = transformMathEdits(oldText, variant, depth + 1).source;
+  const newPart = newText === null ? null : transformMathEdits(newText, variant, depth + 1).source;
+  let replacement;
+  if (variant === 'clean') {
+    replacement = command[1] === 'add' ? oldPart
+      : command[1] === 'remove' ? '' : newPart;
+  } else {
+    const oldMath = `\\textcolor{blue}{\\cancel{${oldPart}}}`;
+    replacement = command[1] === 'add' ? `\\textcolor{red}{${oldPart}}`
+      : command[1] === 'remove' ? oldMath
+        : `${oldMath}\\,\\textcolor{red}{${newPart}}`;
+  }
+  const tail = transformMathEdits(source.slice(cursor), variant, depth + 1);
+  return { source: source.slice(0, command.index) + replacement + tail.source, changed: true };
 }
 
 export class TexRenderer {
@@ -150,25 +157,38 @@ export class TexRenderer {
   }
 
   math(src, display, tag) {
-    let body = expandMathEdits(src).replace(/\\label\s*\{[^}]*\}/g, '').replace(/\\(?:nonumber|notag)\b/g, '');
+    const annotated = transformMathEdits(src, 'annotated');
+    const clean = transformMathEdits(src, 'clean');
+    let body = (annotated.changed ? annotated.source : src).replace(/\\label\s*\{[^}]*\}/g, '').replace(/\\(?:nonumber|notag)\b/g, '');
     body = body.replace(/\\begin\{psmallmatrix\}/g, '\\left(\\begin{smallmatrix}')
       .replace(/\\end\{psmallmatrix\}/g, '\\end{smallmatrix}\\right)');
     let explicitTag = null;
     body = body.replace(/\\tag\{([^}]*)\}/g, (_, t) => { explicitTag = t; return ''; });
     const finalTag = explicitTag ?? tag;
-    if (finalTag && display) body = `${body}\\tag{${finalTag}}`;
-    try {
-      const html = katex.renderToString(body, { displayMode: display, throwOnError: true, macros: { ...this.macros }, strict: 'ignore', trust: false });
-      if (finalTag && display) {
-        const split = detachKaTeXTag(html);
-        if (!split) throw new Error('KaTeX did not emit a separable equation tag');
-        return `<div class="dmath-layout"><div class="dmath-formula" title="Scroll horizontally to see the entire formula">${split.formula}</div><span class="dmath-tag" aria-hidden="true">${split.tag}</span></div>`;
+    const render = (source) => {
+      let variantBody = source.replace(/\\label\s*\{[^}]*\}/g, '').replace(/\\(?:nonumber|notag)\b/g, '');
+      variantBody = variantBody.replace(/\\begin\{psmallmatrix\}/g, '\\left(\\begin{smallmatrix}')
+        .replace(/\\end\{psmallmatrix\}/g, '\\end{smallmatrix}\\right)');
+      if (finalTag && display) variantBody = `${variantBody}\\tag{${finalTag}}`;
+      try {
+        const html = katex.renderToString(variantBody, { displayMode: display, throwOnError: true, macros: { ...this.macros }, strict: 'ignore', trust: false });
+        if (finalTag && display) {
+          const split = detachKaTeXTag(html);
+          if (!split) throw new Error('KaTeX did not emit a separable equation tag');
+          return `<div class="dmath-layout"><div class="dmath-formula" title="Scroll horizontally to see the entire formula">${split.formula}</div><span class="dmath-tag" aria-hidden="true">${split.tag}</span></div>`;
+        }
+        return html;
+      } catch (e) {
+        this.warnings.push(`KaTeX: ${e.message.split('\n')[0]} in: ${src.slice(0, 80)}`);
+        return `<code class="tex-error">${escapeHtml(src)}</code>`;
       }
-      return html;
-    } catch (e) {
-      this.warnings.push(`KaTeX: ${e.message.split('\n')[0]} in: ${src.slice(0, 80)}`);
-      return `<code class="tex-error">${escapeHtml(src)}</code>`;
-    }
+    };
+    if (!annotated.changed) return render(body);
+    const cleanBody = clean.source.replace(/\\label\s*\{[^}]*\}/g, '').replace(/\\(?:nonumber|notag)\b/g, '').replace(/\\tag\{[^}]*\}/g, '');
+    const makeVariant = (variant, rendered) => display
+      ? `<div class="math-${variant}">${rendered}</div>`
+      : `<span class="math-${variant}">${rendered}</span>`;
+    return makeVariant('clean', render(cleanBody)) + makeVariant('annotated', render(body));
   }
 
   ref(label, eq, displayHtml = null) {
@@ -317,7 +337,8 @@ export class TexRenderer {
               this.warnings.push(`unsafe Lean source URL omitted for ${declaration}`);
               out += `<code>${escapeHtml(declaration)}</code>`;
             } else {
-              out += `<a class="lean-source" href="${escapeHtml(url)}"><code>${escapeHtml(declaration)}</code></a>`;
+              const shortName = declaration.split('.').slice(-2).join('.');
+              out += `<a class="lean-source" href="${escapeHtml(url)}" title="${escapeHtml(declaration)}"><code>${escapeHtml(shortName)}</code></a>`;
             }
             i = j;
             continue;
