@@ -69,3 +69,17 @@ test('Lean link renderer refuses an unsafe target', () => {
   assert.doesNotMatch(html, /href="javascript:/);
   assert.deepEqual(r.warnings, ['unsafe Lean source URL omitted for Foo.result']);
 });
+
+test('Lean links accept local pinned source pages and reject parent traversal', () => {
+  for (const [url, accepted] of [
+    ['./sources/formal/Foo.lean.html#L12', true],
+    ['./sources/formal/../Foo.lean.html#L12', false],
+    ['./sources/formal/Foo.lean.html#L12" onclick="alert(1)', false],
+  ]) {
+    const r = new TexRenderer({ macros: {}, refs: {}, cites: {}, eqAuto: new Map(),
+      leanRefs: new Map([[['leandecl', 'Foo.lean', '12', 'Foo.result'].join('\0'), url]]) });
+    const html = r.text(String.raw`\leandecl{Foo.lean}{12}{Foo.result}`);
+    assert.equal(html.includes('class="lean-source"'), accepted);
+    assert.equal(r.warnings.length, accepted ? 0 : 1);
+  }
+});

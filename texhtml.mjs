@@ -333,7 +333,9 @@ export class TexRenderer {
             if (!url) {
               this.warnings.push(`unresolved \\${name}{${fileArg}}{${lineArg}}{${declaration}}`);
               out += `<code>${escapeHtml(declaration || `${fileArg}:${lineArg}`)}</code>`;
-            } else if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/blob\/[A-Fa-f0-9]{40}\/[^\s"<>]+#L\d+(?:-L\d+)?$/.test(url)) {
+            } else if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/blob\/[A-Fa-f0-9]{40}\/[^\s"<>]+#L\d+(?:-L\d+)?$/.test(url)
+                && !(/^\.\/sources\/[A-Za-z0-9_./-]+\.lean\.html#L\d+$/.test(url)
+                  && !url.split('/').includes('..'))) {
               this.warnings.push(`unsafe Lean source URL omitted for ${declaration}`);
               out += `<code>${escapeHtml(declaration)}</code>`;
             } else {
