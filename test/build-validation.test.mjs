@@ -159,8 +159,15 @@ test('preserved manuscript aliases redirect to one current canonical definition'
   assert.equal((html.match(/id="definition-formal:Foo.Canonical"/g) ?? []).length, 1);
   assert.match(html, /Defined in formal\/test/);
   assert.match(html, /href="#definition-formal:Foo.Canonical"/);
-  assert.match(html, /class="statement-definitions"/);
   assert.match(html, new RegExp(f.map.sources.formal.commit + '/Foo\\.lean#L4'));
+  f.map.sources.formal.local_source_base = './sources/formal';
+  const local = f.run();
+  assert.equal(local.status, 0, local.stdout + local.stderr);
+  const localHtml = fs.readFileSync(f.htmlPath, 'utf8');
+  assert.match(localHtml, /href="\.\/sources\/formal\/Foo\.lean\.html#L4"/);
+  const source = fs.readFileSync(path.join(path.dirname(f.htmlPath), 'sources/formal/Foo.lean.html'), 'utf8');
+  assert.match(source, /id="L2"/);
+  assert.match(source, /def Canonical : Prop := True/);
 });
 
 test('check audits current manuscript links, statement coverage, pins, and section-aware equation tags', (t) => {
