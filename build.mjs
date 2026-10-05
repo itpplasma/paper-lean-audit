@@ -817,7 +817,7 @@ for (const [key, sourceText] of fileCache) {
   const colon = key.indexOf(':');
   const repo = key.slice(0, colon), file = key.slice(colon + 1);
   const source = map.sources[repo];
-  if (!source?.local_source_base || sourceText == null || !file.endsWith('.lean')) continue;
+  if (!source?.local_source_base || sourceText == null || !file.endsWith('.lean') || file.includes(':')) continue;
   const destination = path.resolve(outDir, source.local_source_base, file + '.html');
   if (!destination.startsWith(path.resolve(outDir) + path.sep)) {
     errors.push(`Local source path escapes output directory: ${destination}`);
