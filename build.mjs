@@ -831,7 +831,7 @@ for (const [key, sourceText] of fileCache) {
   fs.writeFileSync(destination, `<!doctype html><meta charset="utf-8"><title>${escapeHtml(file)}</title><style>body{font:14px monospace}pre span{display:block}pre span:target{background:#fff0ad}a{color:#666}pre{white-space:pre-wrap}</style><h1>${escapeHtml(file)}</h1><p>${escapeHtml(source.label ?? source.repo)} · ${escapeHtml(source.commit)}</p><pre>${lines}</pre>`);
 }
 const htmlPath = path.join(outDir, outputStem + '.html');
-fs.writeFileSync(htmlPath, html);
+fs.writeFileSync(htmlPath, html.replace(/[ \t]+$/gm, ''));
 fs.writeFileSync(path.join(outDir, 'version.json'), JSON.stringify({ version: map.version, paper: src.paper.commit, formal: src.formal.commit, generator: generatorHash }) + '\n');
 console.log(`wrote ${htmlPath}`);
 if (warnings.length) console.log(`${warnings.length} warnings:\n  ` + warnings.join('\n  '));
