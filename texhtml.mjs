@@ -147,12 +147,13 @@ function transformMathEdits(source, variant, depth = 0) {
 }
 
 export class TexRenderer {
-  constructor({ macros, refs, cites, eqAuto, leanRefs = new Map() }) {
+  constructor({ macros, refs, cites, eqAuto, leanRefs = new Map(), leanNames = new Map() }) {
     this.macros = macros;      // KaTeX macros
     this.refs = refs;          // label -> {text, href}
     this.cites = cites;        // key -> short label
     this.eqAuto = eqAuto;      // display-math environment start offset -> rendered tag
     this.leanRefs = leanRefs;  // TeX macro key -> pinned source URL
+    this.leanNames = leanNames; // Historical annotation -> current canonical name
     this.warnings = [];
   }
 
@@ -339,8 +340,10 @@ export class TexRenderer {
               this.warnings.push(`unsafe Lean source URL omitted for ${declaration}`);
               out += `<code>${escapeHtml(declaration)}</code>`;
             } else {
-              const shortName = declaration.split('.').slice(-2).join('.');
-              out += `<a class="lean-source" href="${escapeHtml(url)}" title="${escapeHtml(declaration)}"><code>${escapeHtml(shortName)}</code></a>`;
+              const canonical = this.leanNames.get([name, fileArg, lineArg, declaration].join('\0')) ?? declaration;
+              const shortName = canonical.split('.').slice(-2).join('.');
+              const title = canonical === declaration ? declaration : `${canonical} (historical annotation: ${declaration})`;
+              out += `<a class="lean-source" href="${escapeHtml(url)}" title="${escapeHtml(title)}"><code>${escapeHtml(shortName)}</code></a>`;
             }
             i = j;
             continue;

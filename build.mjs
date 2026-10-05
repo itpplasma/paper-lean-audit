@@ -123,6 +123,7 @@ function splitMathRows(body) {
 const eqAuto = new Map();
 const refs = {};
 const leanMacroRefs = new Map();
+const leanMacroNames = new Map();
 {
   const noComments = cleanTexRaw;
   const sectionNumbered = /\\numberwithin\s*\{\s*equation\s*\}\s*\{\s*section\s*\}/.test(noComments);
@@ -279,7 +280,7 @@ for (const m of bib.matchAll(/@\w+\{([^,]+),[\s\S]*?\n\}/g)) {
   cites[m[1].trim()] = `${surname}${year ? ' ' + year : ''}`;
 }
 
-const tex = new TexRenderer({ macros, refs, cites, eqAuto, leanRefs: leanMacroRefs });
+const tex = new TexRenderer({ macros, refs, cites, eqAuto, leanRefs: leanMacroRefs, leanNames: leanMacroNames });
 const markupSpans = [];
 for (const match of cleanTexRaw.matchAll(/\\(AIadd|AIremove|AIreplace|AIcomment|formalref)\b/g)) {
   if (escapedCommand(cleanTexRaw, match.index)) continue;
@@ -465,6 +466,7 @@ function checkManuscriptLinks(rawSource, revisionLabel) {
         errors.push(`Paper (${revisionLabel}): canonical target ${target.name} not found in ${targetRepo}:${target.file}`);
       } else {
         leanMacroRefs.set(leanMacroKey(m[1], file, sourceLine, name), ghBlob(targetRepo, target.file, targetFound.line));
+        leanMacroNames.set(leanMacroKey(m[1], file, sourceLine, name), target.name);
       }
     }
   }
@@ -817,7 +819,7 @@ for (const [key, sourceText] of fileCache) {
   const colon = key.indexOf(':');
   const repo = key.slice(0, colon), file = key.slice(colon + 1);
   const source = map.sources[repo];
-  if (!source?.local_source_base || sourceText == null || !file.endsWith('.lean') || file.includes(':')) continue;
+  if (!source?.local_source_base || sourceText == null || file.includes(':')) continue;
   const destination = path.resolve(outDir, source.local_source_base, file + '.html');
   if (!destination.startsWith(path.resolve(outDir) + path.sep)) {
     errors.push(`Local source path escapes output directory: ${destination}`);

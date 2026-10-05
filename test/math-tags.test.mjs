@@ -83,3 +83,13 @@ test('Lean links accept local pinned source pages and reject parent traversal', 
     assert.equal(r.warnings.length, accepted ? 0 : 1);
   }
 });
+
+test('preserved annotations display the canonical name with the old name in the title', () => {
+  const key = ['leandecl', 'Foo.lean', '12', 'Foo.Old'].join('\0');
+  const r = new TexRenderer({ macros: {}, refs: {}, cites: {}, eqAuto: new Map(),
+    leanRefs: new Map([[key, './sources/formal/Foo.lean.html#L2']]),
+    leanNames: new Map([[key, 'Foo.Canonical']]) });
+  const html = r.text(String.raw`\leandecl{Foo.lean}{12}{Foo.Old}`);
+  assert.match(html, /<code>Foo.Canonical<\/code>/);
+  assert.match(html, /historical annotation: Foo.Old/);
+});
