@@ -17,7 +17,7 @@ async function run(items, assertions) {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   let browser;
   try {
-    browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+    browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
     const page = await browser.newPage();
     await page.goto('http://127.0.0.1:' + server.address().port);
     await page.addScriptTag({ content: reviewJs });

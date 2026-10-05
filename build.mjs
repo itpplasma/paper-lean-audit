@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { TexRenderer, escapeHtml, stripComments, readGroup } from './texhtml.mjs';
 import { findDeclaration, extractStatement, extractDeclaration, highlightLean, namedResultType, definitionNames, declarationContext, bindingNames, declarationTrust } from './lean.mjs';
 import { reviewScopeOptions } from './review-scope.mjs';
+import { resolveDefinitionRef } from './definition-links.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -46,8 +47,7 @@ const liveUrl = map.live_url ?? '';
 const errors = [];
 const warnings = [];
 
-function gitShow(repoKey, file) {
-  const commit = map.sources[repoKey]?.commit;
+function gitShow(repoKey, file, commit = map.sources[repoKey]?.commit) {
   if (!commit || !dirs[repoKey]) {
     errors.push(`${repoKey}: no pinned source repository is configured for ${file}`);
     return null;
@@ -61,7 +61,11 @@ function gitShow(repoKey, file) {
     return null;
   }
 }
-const ghBlob = (repoKey, file, a, b) => `https://github.com/${map.sources[repoKey].repo}/blob/${map.sources[repoKey].commit}/${file}#L${a}${b && b !== a ? '-L' + b : ''}`;
+const ghBlob = (repoKey, file, a, b) => {
+  const source = map.sources[repoKey];
+  if (source.local_source_base) return `${source.local_source_base}/${file}.html#L${a}`;
+  return `https://github.com/${source.repo}/blob/${source.commit}/${file}#L${a}${b && b !== a ? '-L' + b : ''}`;
+};
 const slug = (s) => s.replace(/[^A-Za-z0-9_.:-]/g, '-');
 const leanIndexKey = (info) => info.repo + ':' + (info.module_only ? 'file:' + info.file
   : info.exported === false ? 'private:' + info.file + ':' + info.name : 'decl:' + info.file + ':' + info.name);
@@ -317,6 +321,7 @@ function excerpt(range) {
 const fileCache = new Map();
 const leanIndex = new Map(); // repository-qualified declaration/file -> {source info, users}
 function resolveLean(ref, userId) {
+  ref = { ...ref, ...(map.canonical_declarations?.[ref.name] ?? {}) };
   const repoKey = ref.repo ?? 'formal';
   const key = `${repoKey}:${ref.file}`;
   if (!fileCache.has(key)) fileCache.set(key, gitShow(repoKey, ref.file));
@@ -386,33 +391,9 @@ function statementDefinitions(info, userId) {
   }
   const explicit = (info.expands ?? []).map((ref) => resolveLean({ ...ref, repo: ref.repo ?? info.repo }, userId));
   if (!info.resultType || explicit.length) return { definitions: explicit, unavailable: null };
-  const ns = info.name.split('.').slice(0, -1);
-  const lookup = (name) => {
-    const candidates = definitionCatalog.get(`${info.repo}:${name}`) ?? [];
-    const local = candidates.filter((ref) => ref.file === info.file);
-    return local.length === 1 ? local[0] : candidates.length === 1 ? candidates[0] : null;
-  };
-  for (let n = ns.length; n >= 0; n--) {
-    const name = [...ns.slice(0, n), info.resultType].join('.');
-    const ref = lookup(name);
-    if (ref) return { definitions: [resolveLean(ref, userId)], unavailable: null };
-    if (definitionCatalog.has(`${info.repo}:${name}`)) return { definitions: [], unavailable: info.resultType };
-  }
-  const opened = new Map();
-  let ambiguousOpen = false;
-  for (const entry of info.context ?? []) {
-    const match = /^\s*open\s+([A-Za-z_][A-Za-z0-9_'.\s]*?)\s*$/.exec(entry.text);
-    if (!match || match[1].startsWith('scoped ') || /\b(?:hiding|renaming|in)\b/.test(match[1])) continue;
-    for (const name of match[1].trim().split(/\s+/)) {
-      for (let n = ns.length; n >= 0; n--) {
-        const qualified = [...ns.slice(0, n), name, info.resultType].join('.');
-        const ref = lookup(qualified);
-        if (ref) { opened.set(qualified, ref); break; }
-        if (definitionCatalog.has(`${info.repo}:${qualified}`)) { ambiguousOpen = true; break; }
-      }
-    }
-  }
-  if (!ambiguousOpen && opened.size === 1) return { definitions: [resolveLean([...opened.values()][0], userId)], unavailable: null };
+  const refs = [...definitionCatalog.values()].flat();
+  const ref = resolveDefinitionRef(info, info.resultType, refs);
+  if (ref) return { definitions: [resolveLean(ref, userId)], unavailable: null };
   // Built-in logical/type constructors are already legible in the signature.
   return { definitions: [], unavailable: /^[A-Z]/.test(info.resultType) && !['True', 'False', 'Nonempty', 'Exists', 'And', 'Or', 'Iff', 'Eq'].includes(info.resultType) ? info.resultType : null };
 }
@@ -459,8 +440,9 @@ function checkManuscriptLinks(rawSource, revisionLabel) {
       continue;
     }
     const repoKey = m[1] === 'leanlib' ? 'library' : 'formal';
-    const key = `${repoKey}:${file}`;
-    if (!fileCache.has(key)) fileCache.set(key, gitShow(repoKey, file));
+    const originalCommit = map.manuscript_sources?.[repoKey]?.commit;
+    const key = `${repoKey}:${originalCommit ?? map.sources[repoKey]?.commit}:${file}`;
+    if (!fileCache.has(key)) fileCache.set(key, gitShow(repoKey, file, originalCommit ?? map.sources[repoKey]?.commit));
     const leanSource = fileCache.get(key);
     if (leanSource == null) continue; // gitShow already recorded the failure.
     const found = findDeclaration(leanSource, name, sourceLine);
@@ -473,7 +455,17 @@ function checkManuscriptLinks(rawSource, revisionLabel) {
     } else if (found.line !== sourceLine) {
       errors.push(`Paper (${revisionLabel}): \\${m[1]} ${name} points to ${file}:${sourceLine}, declaration is at line ${found.line} (reference at ${paperFile}:${line})`);
     } else {
-      leanMacroRefs.set(leanMacroKey(m[1], file, sourceLine, name), ghBlob(repoKey, file, found.line));
+      const target = map.canonical_declarations?.[name] ?? { repo: repoKey, file, name };
+      const targetRepo = target.repo ?? repoKey;
+      const targetKey = `${targetRepo}:${target.file}`;
+      if (!fileCache.has(targetKey)) fileCache.set(targetKey, gitShow(targetRepo, target.file));
+      const targetSource = fileCache.get(targetKey);
+      const targetFound = targetSource == null ? null : findDeclaration(targetSource, target.name);
+      if (!targetFound?.exact || targetFound.exported === false) {
+        errors.push(`Paper (${revisionLabel}): canonical target ${target.name} not found in ${targetRepo}:${target.file}`);
+      } else {
+        leanMacroRefs.set(leanMacroKey(m[1], file, sourceLine, name), ghBlob(targetRepo, target.file, targetFound.line));
+      }
     }
   }
 }
@@ -527,32 +519,17 @@ function md(s) {
 }
 
 // Explicitly curated symbol links: no short-name guessing across namespaces.
-const definitionRefs = map.challenge_definitions ?? [];
+const definitionRefs = [...new Map((map.challenge_definitions ?? []).map((ref) => {
+  const canonical = { ...ref, ...(map.canonical_declarations?.[ref.name] ?? {}) };
+  return [`${canonical.repo ?? 'formal'}:${canonical.name}`, canonical];
+})).values()];
 const definitionAnchor = (ref) => `definition-${slug((ref.repo ?? 'formal') + ':' + ref.name)}`;
 function symbolLink(info, token) {
   // The lexer keeps the trailing dot in `name.{u}` as part of the identifier
   // token. It is universe-application syntax, so match the declaration name
   // without the dot while keeping the rendered token intact.
-  const lookup = token.replace(/\.$/, '');
-  const exactLink = (refs) => refs.length === 1 ? '#' + definitionAnchor(refs[0]) : null;
-
-  // Lean resolves an unqualified identifier from the innermost namespace
-  // outward before considering a root-level declaration. A short-name match
-  // in some unrelated namespace is not enough evidence for a link.
-  if (!lookup.includes('.')) {
-    const parts = (info.name ?? '').split('.');
-    parts.pop(); // The final component is the declaration being rendered.
-    for (let n = parts.length; n > 0; n--) {
-      const candidate = parts.slice(0, n).concat(lookup).join('.');
-      const local = definitionRefs.filter((ref) => ref.name === candidate);
-      if (local.length) return exactLink(local);
-    }
-  }
-
-  // Explicitly qualified references, and unqualified root names such as
-  // Mathlib's Field, resolve only when exactly one curated owner has that
-  // exact name. Do not guess among namespaced suffix matches.
-  return exactLink(definitionRefs.filter((ref) => ref.name === lookup));
+  const ref = resolveDefinitionRef(info, token, definitionRefs);
+  return ref ? '#' + definitionAnchor(ref) : null;
 }
 function leanBlock(info, role) {
   if (!info.url) return `<div class="lean missing">${escapeHtml(info.name ?? info.file)} — source unavailable</div>`;
@@ -580,7 +557,7 @@ function issueBlock(iss, ownerId) {
 
 const reviewChecks = map.review_checks;
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex').slice(0, 16);
-const generatorHash = sha(['build.mjs', 'lean.mjs', 'texhtml.mjs', 'review.js', 'review-scope.mjs', 'style.css', 'package.json', 'package-lock.json']
+const generatorHash = sha(['build.mjs', 'lean.mjs', 'definition-links.mjs', 'texhtml.mjs', 'review.js', 'review-scope.mjs', 'style.css', 'package.json', 'package-lock.json']
   .map((file) => fs.readFileSync(path.join(here, file), 'utf8')).join('\0'));
 
 // Committed review records (exported from the HTML, one file per reviewer and pass).
@@ -737,7 +714,9 @@ function depGraph() {
 
 const challengeDefinitions = definitionRefs.map((ref) => {
   const info = resolveLean(ref, 'challenge-definitions');
-  return `<details id="${definitionAnchor(ref)}" class="challenge-definition"><summary>${escapeHtml(ref.name)}${ref.note ? ' — ' + escapeHtml(ref.note) : ''}</summary>${leanBlock(info, 'definition')}</details>`;
+  const source = map.sources[ref.repo ?? 'formal'];
+  const owner = source?.label ?? source?.repo ?? ref.repo ?? 'formal';
+  return `<details id="${definitionAnchor(ref)}" class="challenge-definition"><summary>${escapeHtml(ref.name)}${ref.note ? ' — ' + escapeHtml(ref.note) : ''}</summary><p class="definition-origin">Defined in ${escapeHtml(owner)} · <code>${escapeHtml(ref.file)}</code></p>${leanBlock(info, 'definition')}</details>`;
 }).join('');
 const challengeEndpoints = (map.challenge_endpoints ?? []).map((ref) => leanBlock(resolveLean(ref, 'challenge-definitions'), 'proved challenge endpoint')).join('');
 // Render cards first so the Lean index is populated.
@@ -832,6 +811,23 @@ ${challengeDefinitions ? `<section id="challenge-definitions"><h2>Challenge defi
 </body></html>`;
 
 fs.mkdirSync(outDir, { recursive: true });
+// Draft sources can be reviewed offline before their commits are published.
+// These pages are rendered from the same pinned bytes as the proof excerpts.
+for (const [key, sourceText] of fileCache) {
+  const colon = key.indexOf(':');
+  const repo = key.slice(0, colon), file = key.slice(colon + 1);
+  const source = map.sources[repo];
+  if (!source?.local_source_base || sourceText == null || !file.endsWith('.lean')) continue;
+  const destination = path.resolve(outDir, source.local_source_base, file + '.html');
+  if (!destination.startsWith(path.resolve(outDir) + path.sep)) {
+    errors.push(`Local source path escapes output directory: ${destination}`);
+    continue;
+  }
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  const lines = sourceText.split('\n').map((line, i) =>
+    `<span id="L${i + 1}"><a href="#L${i + 1}">${i + 1}</a> ${escapeHtml(line)}</span>`).join('\n');
+  fs.writeFileSync(destination, `<!doctype html><meta charset="utf-8"><title>${escapeHtml(file)}</title><style>body{font:14px monospace}pre span{display:block}pre span:target{background:#fff0ad}a{color:#666}pre{white-space:pre-wrap}</style><h1>${escapeHtml(file)}</h1><p>${escapeHtml(source.label ?? source.repo)} · ${escapeHtml(source.commit)}</p><pre>${lines}</pre>`);
+}
 const htmlPath = path.join(outDir, outputStem + '.html');
 fs.writeFileSync(htmlPath, html);
 fs.writeFileSync(path.join(outDir, 'version.json'), JSON.stringify({ version: map.version, paper: src.paper.commit, formal: src.formal.commit, generator: generatorHash }) + '\n');

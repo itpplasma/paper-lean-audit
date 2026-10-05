@@ -134,6 +134,35 @@ function fixture(t) {
     setMathlibDir: (dir) => { mathlibDir = dir; } };
 }
 
+test('preserved manuscript aliases redirect to one current canonical definition', (t) => {
+  const f = fixture(t);
+  const original = f.formal.commit;
+  fs.writeFileSync(path.join(f.formal.repo, 'Foo.lean'),
+    'namespace Foo\n' +
+    'def Canonical : Prop := True\n' +
+    'open Foo (Canonical)\n' +
+    'theorem current : Canonical := by\n  trivial\nend Foo\n');
+  git(f.formal.repo, 'add', '.');
+  git(f.formal.repo, '-c', 'user.name=Audit Test', '-c', 'user.email=audit@example.test', 'commit', '-qm', 'canonical owner');
+  f.map.manuscript_sources = { formal: { commit: original } };
+  f.map.sources.formal.commit = git(f.formal.repo, 'rev-parse', 'HEAD');
+  const canonical = { repo: 'formal', file: 'Foo.lean', name: 'Foo.Canonical' };
+  f.map.canonical_declarations = {
+    'Foo.valid': { repo: 'formal', file: 'Foo.lean', name: 'Foo.current' },
+    'Foo.helper': canonical,
+    'Foo.Old': canonical,
+  };
+  f.map.challenge_definitions = [canonical, { ...canonical, name: 'Foo.Old' }];
+  const result = f.run();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const html = fs.readFileSync(f.htmlPath, 'utf8');
+  assert.equal((html.match(/id="definition-formal:Foo.Canonical"/g) ?? []).length, 1);
+  assert.match(html, /Defined in formal\/test/);
+  assert.match(html, /href="#definition-formal:Foo.Canonical"/);
+  assert.match(html, /class="statement-definitions"/);
+  assert.match(html, new RegExp(f.map.sources.formal.commit + '/Foo\\.lean#L4'));
+});
+
 test('check audits current manuscript links, statement coverage, pins, and section-aware equation tags', (t) => {
   const f = fixture(t);
   let result = f.run();
@@ -346,7 +375,7 @@ test('a changed review-scope module makes earlier human approval stale', (t) => 
   const f = fixture(t);
   const generator = path.join(f.root, 'generator');
   fs.mkdirSync(generator);
-  for (const file of ['build.mjs', 'lean.mjs', 'texhtml.mjs', 'review.js', 'review-scope.mjs',
+  for (const file of ['build.mjs', 'lean.mjs', 'definition-links.mjs', 'texhtml.mjs', 'review.js', 'review-scope.mjs',
     'style.css', 'package.json', 'package-lock.json']) {
     fs.copyFileSync(path.join(auditDir, file), path.join(generator, file));
   }
