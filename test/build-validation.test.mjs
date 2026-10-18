@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const auditDir = path.resolve(testDir, '..');
@@ -133,6 +134,34 @@ function fixture(t) {
   return { root, paper, formal, library, global, map, mapPath, reviews, htmlPath, currentPaperSource, run, writeMap,
     setMathlibDir: (dir) => { mathlibDir = dir; } };
 }
+
+test('bundled manuscript snapshots are checked and have local source links', (t) => {
+  const f = fixture(t);
+  const files = {};
+  for (const name of ['human_readable_main.tex', 'references.bib']) {
+    files[name] = crypto.createHash('sha256').update(fs.readFileSync(path.join(f.paper.repo, name))).digest('hex');
+  }
+  f.map.sources.paper.snapshot = {files};
+  f.map.sources.paper.local_source_base = './sources/paper';
+  const result = f.run();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const html = fs.readFileSync(f.htmlPath, 'utf8');
+  assert.match(html, /href="\.\/sources\/paper\/human_readable_main\.tex\.html#L6"/);
+  assert.match(fs.readFileSync(path.join(path.dirname(f.htmlPath), 'sources/paper/human_readable_main.tex.html'), 'utf8'), /A covered theorem/);
+  fs.appendFileSync(path.join(f.paper.repo, 'human_readable_main.tex'), '\nTampered text.\n');
+  const bad = f.run();
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr, /snapshot checksum mismatch/);
+});
+
+test('excluded manuscript statements and duplicate labels do not enter the audit', (t) => {
+  const f = fixture(t);
+  fs.appendFileSync(path.join(f.paper.repo, 'human_readable_main.tex'),
+    '\n\\begin{comment}\n\\begin{theorem}\\label{not-current}Excluded.\\end{theorem}\n' +
+    '\\label{thm:covered}\\begin{equation}old\\end{equation}\n\\end{comment}\n');
+  const result = f.run();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+});
 
 test('preserved manuscript aliases redirect to one current canonical definition', (t) => {
   const f = fixture(t);

@@ -33,13 +33,17 @@ function detachKaTeXTag(html) {
 }
 
 export function stripComments(tex) {
-  return tex.split('\n').map((line) => {
+  const uncommented = tex.split('\n').map((line) => {
     for (let i = 0; i < line.length; i++) {
       if (line[i] === '\\') { i++; continue; }
       if (line[i] === '%') return line.slice(0, i);
     }
     return line;
   }).join('\n');
+  // Excluded proofs must not contribute labels, equations or review claims.
+  // Keep newlines and offsets for links into the unmodified manuscript.
+  return uncommented.replace(/\\begin\{comment\}[\s\S]*?\\end\{comment\}/g,
+    block => block.replace(/[^\n]/g, ' '));
 }
 
 // Reads a balanced {...} group starting at s[i] === '{'. Returns [content, nextIndex].
@@ -313,6 +317,7 @@ export class TexRenderer {
             continue;
           }
           case 'end': arg(); i = j; continue;
+          case 'qed': out += '<span class="qed">∎</span>'; i = j; continue;
           case 'AIadd': { const a = readArg(); out += `<span class="ai-add">${this.text(a.content, a.base)}</span>`; i = j; continue; }
           case 'AIremove': { const a = readArg(); out += `<del class="ai-remove">${this.text(a.content, a.base)}</del>`; i = j; continue; }
           case 'AIreplace': { const a = readArg(), b = readArg(); out += `<del class="ai-remove">${this.text(a.content, a.base)}</del><span class="ai-add">${this.text(b.content, b.base)}</span>`; i = j; continue; }

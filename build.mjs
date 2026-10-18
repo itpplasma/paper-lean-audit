@@ -52,6 +52,20 @@ function gitShow(repoKey, file, commit = map.sources[repoKey]?.commit) {
     errors.push(`${repoKey}: no pinned source repository is configured for ${file}`);
     return null;
   }
+  const snapshot = map.sources[repoKey]?.snapshot;
+  if (snapshot && commit === map.sources[repoKey].commit) {
+    try {
+      const sourcePath = path.resolve(dirs[repoKey], file);
+      if (!sourcePath.startsWith(path.resolve(dirs[repoKey]) + path.sep)) throw new Error('unsafe snapshot path');
+      const bytes = fs.readFileSync(sourcePath);
+      if (!snapshot.files[file] || crypto.createHash('sha256').update(bytes).digest('hex') !== snapshot.files[file])
+        throw new Error('snapshot checksum mismatch');
+      return bytes.toString('utf8');
+    } catch (error) {
+      errors.push(`${repoKey}: cannot read verified snapshot ${file}: ${error.message}`);
+      return null;
+    }
+  }
   try {
     return execFileSync('git', ['-C', dirs[repoKey], 'show', `${commit}:${file}`], {
       encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'ignore'],
@@ -320,6 +334,8 @@ function excerpt(range) {
 
 // ------------------------------------------------------------------ lean ----
 const fileCache = new Map();
+// Render the complete manuscript as a local source page as well as excerpts.
+fileCache.set('paper:' + paperFile, texRaw);
 const leanIndex = new Map(); // repository-qualified declaration/file -> {source info, users}
 function resolveLean(ref, userId) {
   ref = { ...ref, ...(map.canonical_declarations?.[ref.name] ?? {}) };
@@ -632,7 +648,7 @@ function card(it) {
   }).join('');
   const deps = (it.depends_on ?? []).map((d) => `<a href="#item-${slug(d)}">${escapeHtml(itemById[d]?.short ?? d)}</a>`).join(', ');
   const usedBy = items.filter((o) => (o.depends_on ?? []).includes(it.id)).map((o) => `<a href="#item-${slug(o.id)}">${escapeHtml(o.short ?? o.id)}</a>`).join(', ');
-  const texLink = it.tex_lines ? `https://github.com/${map.sources.paper.repo}/blob/${map.sources.paper.commit}/${paperFile}#L${it.tex_lines[0]}-L${it.tex_lines[1]}` : null;
+  const texLink = it.tex_lines ? ghBlob('paper', paperFile, ...it.tex_lines) : null;
   const maxSev = (it.issues ?? []).reduce((acc, iss) => Math.max(acc, SEV[iss.severity]?.rank ?? 0), 0);
   const guidedNav = `<nav class="guided-claim-nav" aria-label="Paper-order claim navigation">
     ${previous ? `<a rel="prev" data-guided-visit="${escapeHtml(previous.id)}" href="#item-${slug(previous.id)}">← Previous claim</a>` : '<span class="guided-disabled" aria-disabled="true">First claim</span>'}
@@ -657,6 +673,8 @@ function card(it) {
   </div>
   <details class="assess"><summary>Comparison notes</summary>
     <div class="badges">${badge(REL, it.statement_relation, 'statement')} ${badge(ROUTE, it.route_relation, 'route')}</div>
+    ${it.comparison_updated_on && it.correspondence ? `<div class="correspondence">${md(it.correspondence)}</div>` : ''}
+    ${it.issues?.length ? `<ul class="issues">${it.issues.map(iss => issueBlock(iss, it.id)).join('')}</ul>` : ''}
     ${stepRows ? `<table class="steps"><thead><tr><th>#</th><th>Proof step</th><th>Lean</th></tr></thead><tbody>${stepRows}</tbody></table>` : ''}
     <div class="deps">${deps ? `Uses: ${deps}` : ''}${deps && usedBy ? ' · ' : ''}${usedBy ? `Used by: ${usedBy}` : ''}</div>
   </details>
@@ -796,7 +814,8 @@ const html = `<!doctype html>
 <header class="doc-head" id="overview">
   <h1>Stafford’s Conjecture 3.8</h1>
   <p class="sub">Paper &amp; Lean proof</p>
-  <div class="reader-links"><a href="./human_readable_main.pdf">Paper PDF ↗</a><a href="./lean_proof_details.pdf">Proof details PDF ↗</a></div>
+  ${map.reader_notice ? `<p class="muted reader-notice">${escapeHtml(map.reader_notice)}</p>` : ''}
+  <div class="reader-links"><a href="./human_readable_main.pdf">Paper PDF ↗</a><a href="./lean_proof_details.pdf">Formal proof details PDF ↗</a></div>
   ${guidedItems.length ? `<div class="guided-start"><a data-guided-start href="#item-${slug(guidedItems[0].id)}">Begin reading →</a><a id="guided-resume" data-guided-resume hidden>Continue reading →</a></div>` : ''}
 </header>
 ${sectionHtml}
