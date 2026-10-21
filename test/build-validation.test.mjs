@@ -221,11 +221,12 @@ test('check audits current manuscript links, statement coverage, pins, and secti
   assert.match(html, /href="#item-def">\(Manual\)<\/a>/);
   assert.match(html, /href="#item-def">\(1\.4\)<\/a>/);
 
-  fs.appendFileSync(path.join(f.paper.repo, 'human_readable_main.tex'), '\\leandecl{Foo.lean}{1}{Foo.valid}\n\\leanlib{Lib.lean}{2}{Foo.missing}\n\\leandecl{Foo.lean}{2}{Foo.valid\n');
+  fs.appendFileSync(path.join(f.paper.repo, 'human_readable_main.tex'), '\\leandecl{Foo.lean}{1}{Foo.valid}\n\\leanlib{Lib.lean}{2}{Foo.missing}\n\\leanglobal{Closure.lean}{1}{GlobalStafford.universalStatement}\n\\leandecl{Foo.lean}{2}{Foo.valid\n');
   result = f.run();
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Foo\.valid points to Foo\.lean:1, declaration is at line 2/);
   assert.match(result.stderr, /Foo\.missing not found in library:Lib\.lean/);
+  assert.match(result.stderr, /\\leanglobal GlobalStafford\.universalStatement points to Closure\.lean:1, declaration is at line 2/);
   assert.match(result.stderr, /malformed \\leandecl reference/);
 
   fs.writeFileSync(path.join(f.paper.repo, 'human_readable_main.tex'), f.currentPaperSource);

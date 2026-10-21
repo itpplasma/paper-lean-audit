@@ -418,10 +418,13 @@ function statementDefinitions(info, userId) {
 // The mapping intentionally pins an older, reviewable paper snapshot. Also
 // audit links in the manuscript currently present in the paper checkout so a
 // new or edited \leandecl/\leanlib cannot silently escape --check merely
-// because it has not yet been added to the frozen item map.
+// because it has not yet been added to the frozen item map. \leanglobal and
+// \leanfiltered name declarations in the pinned `global` and `filtered`
+// generalization repositories.
+const LEAN_MACRO_REPOS = { leandecl: 'formal', leanlib: 'library', leanglobal: 'global', leanfiltered: 'filtered' };
 function checkManuscriptLinks(rawSource, revisionLabel) {
   const source = stripComments(rawSource);
-  const re = /\\(leandecl|leanlib)\b/g;
+  const re = /\\(leandecl|leanlib|leanglobal|leanfiltered)\b/g;
   const readCompleteGroup = (text, start) => {
     if (text[start] !== '{') return [null, start, false];
     let depth = 0;
@@ -456,7 +459,7 @@ function checkManuscriptLinks(rawSource, revisionLabel) {
       errors.push(`Paper (${revisionLabel}): invalid \\${m[1]} arguments at ${paperFile}:${line}`);
       continue;
     }
-    const repoKey = m[1] === 'leanlib' ? 'library' : 'formal';
+    const repoKey = LEAN_MACRO_REPOS[m[1]];
     const originalCommit = map.manuscript_sources?.[repoKey]?.commit;
     const key = `${repoKey}:${originalCommit ?? map.sources[repoKey]?.commit}:${file}`;
     if (!fileCache.has(key)) fileCache.set(key, gitShow(repoKey, file, originalCommit ?? map.sources[repoKey]?.commit));

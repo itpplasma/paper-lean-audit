@@ -331,7 +331,7 @@ export class TexRenderer {
             i = j;
             continue;
           }
-          case 'leandecl': case 'leanlib': {
+          case 'leandecl': case 'leanlib': case 'leanglobal': case 'leanfiltered': {
             const fileArg = arg().trim(), lineArg = arg().trim(), declaration = arg().trim();
             // The lookup key is constructed by build.mjs from the command and
             // the exact file/line/name tuple validated against the pinned tree.
