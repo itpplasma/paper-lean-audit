@@ -154,6 +154,14 @@ test('bundled manuscript snapshots are checked and have local source links', (t)
   assert.match(bad.stderr, /snapshot checksum mismatch/);
 });
 
+test('reader header links only the published paper PDF', (t) => {
+  const f = fixture(t);
+  const result = f.run();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const links = fs.readFileSync(f.htmlPath, 'utf8').match(/<div class="reader-links">(.*?)<\/div>/)[1];
+  assert.deepEqual([...links.matchAll(/href="([^"]+)"/g)].map((m) => m[1]), ['./human_readable_main.pdf']);
+});
+
 test('excluded manuscript statements and duplicate labels do not enter the audit', (t) => {
   const f = fixture(t);
   fs.appendFileSync(path.join(f.paper.repo, 'human_readable_main.tex'),

@@ -821,7 +821,7 @@ const html = `<!doctype html>
   <h1>Stafford’s Conjecture 3.8</h1>
   <p class="sub">Paper &amp; Lean proof</p>
   ${map.reader_notice ? `<p class="muted reader-notice">${escapeHtml(map.reader_notice)}</p>` : ''}
-  <div class="reader-links"><a href="./human_readable_main.pdf">Paper PDF ↗</a><a href="./lean_proof_details.pdf">Formal proof details PDF ↗</a></div>
+  <div class="reader-links"><a href="./human_readable_main.pdf">Paper PDF ↗</a></div>
   ${guidedItems.length ? `<div class="guided-start"><a data-guided-start href="#item-${slug(guidedItems[0].id)}">Begin reading →</a><a id="guided-resume" data-guided-resume hidden>Continue reading →</a></div>` : ''}
 </header>
 ${sectionHtml}
