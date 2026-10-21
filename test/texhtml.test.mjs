@@ -138,6 +138,14 @@ test('hyperref preserves its display text and only links local anchors', () => {
   assert.equal(hostile.warnings.length, 2);
 });
 
+test('url links only http(s) addresses and shows them verbatim', () => {
+  const r = renderer();
+  assert.equal(r.text(String.raw`\url{https://example.org/a\_b}`),
+    '<a href="https://example.org/a_b"><code>https://example.org/a_b</code></a>');
+  assert.doesNotMatch(r.text(String.raw`\url{javascript:alert(1)}`), /<a\s/);
+  assert.equal(r.warnings.length, 1);
+});
+
 test('unknown commands and hostile text stay visible without becoming HTML', () => {
   const r = renderer();
   const html = r.text(String.raw`\futurecmd{<img src=x onerror=alert(1)>}`);

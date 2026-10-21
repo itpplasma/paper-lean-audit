@@ -367,6 +367,14 @@ export class TexRenderer {
             } else out += `<a href="${escapeHtml(url)}">${label}</a>`;
             i = j; continue;
           }
+          case 'url': {
+            const url = arg().trim().replace(/\\([#%_&])/g, '$1');
+            if (!/^https?:\/\/[^\s"<>]+$/.test(url)) {
+              this.warnings.push('unsafe external url omitted');
+              out += `<code>${escapeHtml(url)}</code>`;
+            } else out += `<a href="${escapeHtml(url)}"><code>${escapeHtml(url)}</code></a>`;
+            i = j; continue;
+          }
           case 'nolinkurl': { const a = readArg(); out += `<code>${escapeHtml(a.content)}</code>`; i = j; continue; }
           case 'texorpdfstring': { const a = readArg(); readArg(); out += this.text(a.content, a.base); i = j; continue; }
           case 'string': {
