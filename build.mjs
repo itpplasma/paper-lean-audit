@@ -316,13 +316,16 @@ function excerpt(range) {
   let prefix = '', suffix = '', contextNote = '';
   for (const span of markupSpans) {
     if ((span.start < start && start < span.end) || (span.start < end && end < span.end)) {
-      const replacement = span.command === 'AIreplace' ? span.arguments[1] : null;
+      const replacement = span.command === 'AIreplace' ? span.arguments[1]
+        : span.command === 'AIadd' ? span.arguments[0] : null;
       if (replacement && replacement.start <= start && start < replacement.end && end > start && !prefix) {
-        // Consequence cards deliberately quote part of a proposed replacement.
-        // Inherit its addition style; keep the original on the parent card.
+        // Consequence cards deliberately quote part of a proposed replacement
+        // or addition. Inherit its addition style; the parent card shows it whole.
         prefix = '\\AIadd{';
         if (end <= replacement.end) suffix = '}';
-        contextNote = '<p class="muted">Excerpt from a proposed replacement; the parent passage retains the original text.</p>';
+        contextNote = span.command === 'AIreplace'
+          ? '<p class="muted">Excerpt from a proposed replacement; the parent passage retains the original text.</p>'
+          : '<p class="muted">Excerpt from a proposed addition; the parent passage shows it in full.</p>';
         continue;
       }
       errors.push(`Excerpt ${a}-${b} cuts through \\${span.command}; include the complete markup command in tex_lines`);

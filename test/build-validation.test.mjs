@@ -587,6 +587,22 @@ test('a child excerpt of replacement text keeps proposal styling and original so
   assert.doesNotMatch(card,/Old covered theorem/);
 });
 
+test('a child excerpt inside a proposed addition keeps addition styling', (t) => {
+  const f=fixture(t);
+  const source=f.currentPaperSource.replace('A covered theorem.','\\AIadd{A covered theorem.\nFirst added clause.\nSecond added clause.}');
+  fs.writeFileSync(path.join(f.paper.repo,'human_readable_main.tex'),source);
+  git(f.paper.repo,'add','human_readable_main.tex');
+  execFileSync('git',['-C',f.paper.repo,'-c','user.name=Audit Test','-c','user.email=audit@example.test','commit','-qm','addition fixture']);
+  f.map.sources.paper.commit=git(f.paper.repo,'rev-parse','HEAD');
+  f.map.items[0].tex_lines=[6,10];f.map.items[1].tex_lines=[11,23];
+  f.map.items.push({...f.map.items[0],id:'child',label:undefined,tex_lines:[8,8]});
+  const result=f.run();assert.equal(result.status,0,result.stdout+result.stderr);
+  const html=fs.readFileSync(f.htmlPath,'utf8');const card=html.split('id="item-child"')[1].split('</section>')[0];
+  assert.match(card,/Excerpt from a proposed addition/);
+  assert.match(card,/<span class="ai-add">First added clause\./);
+  assert.doesNotMatch(card,/Second added clause/);
+});
+
 // A historical duplicate must not redirect a current equation reference.
 test('commented historical labels do not shadow active equation targets', (t) => {
   const f = fixture(t);
