@@ -130,6 +130,17 @@ test('a sentence covering more Lean steps than the threshold is a large step', (
   assert.match(r.html, /large step: 2 Lean steps/);
 });
 
+test('a prose sentence does not pull later Lean-added steps ahead of it', (t) => {
+  const r = run(copy(t, { map: (m) => {
+    const s = entry(m, 'lem:sum').proof.sentences[0];
+    s.kind = 'prose'; s.note = 'Notation.'; delete s.steps;
+  } }));
+  assert.deepEqual(r.report.errors, []);
+  const h = r.html.slice(r.html.indexOf('Lean: <code>AuditFixture.even_add</code>'));
+  assert.ok(h.indexOf('Write') < h.indexOf('Lean adds'));
+  assert.ok(h.indexOf('By Lemma') < h.indexOf('Lean names the witness'));
+});
+
 test('sync against a previous report lists moved, new and broken anchors', (t) => {
   const first = run(copy(t));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pla-v2-prev-'));

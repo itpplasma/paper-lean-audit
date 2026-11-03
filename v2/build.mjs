@@ -427,8 +427,9 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
       const placed = new Set();
       let large = 0, prose = 0, matched = 0;
       for (const [gi, g] of groupsBySentence.entries()) {
+        // A sentence without Lean steps keeps the remaining Lean-added steps for later rows.
         const upto = Math.min(...g.items.flatMap((m) => m.steps.map((s) => s.index)), Infinity);
-        for (const s of adds) if (!placed.has(s.index) && s.index < upto) { rows += addRow(s); placed.add(s.index); }
+        if (upto < Infinity) for (const s of adds) if (!placed.has(s.index) && s.index < upto) { rows += addRow(s); placed.add(s.index); }
         const span = g.sentence ?? { start: g.items[0].r.start, end: g.items[0].r.end };
         let leanCol = '';
         for (const m of g.items) {
