@@ -40,4 +40,47 @@ test('extractor output equals the committed fixture extraction', { skip, timeout
   assert.deepEqual(steps.map((s) => s.text.split(' ')[0]), ['obtain', 'have', 'obtain', 'refine', 'rw']);
   assert.ok(steps[1].goals_after[0].hyps.some((h) => h.name === 'hb' && h.type === 'IsEven n'));
   assert.deepEqual(steps[1].uses_project, ['AuditFixture.isEven_of_isDoubled']);
+  // Two traced declarations in one module: both keep their steps.
+  assert.deepEqual(got.traces['AuditFixture.isEven_of_isDoubled'].steps.map((s) => s.text.split(' ')[0]), ['obtain', 'exact']);
+});
+
+test('two traced declarations of one module both get their proof states', { skip, timeout: 600000 }, async (t) => {
+  // Lean resets info trees per command, so the extractor must keep them for
+  // every traced command, not only for the last one of the module.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pla-lean-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const project = path.join(dir, 'lean');
+  fs.cpSync(path.join(fixture, 'lean'), project, { recursive: true, filter: (p) => !p.includes(`${path.sep}.lake`) });
+  execFileSync('lake', ['build'], { cwd: project, stdio: 'ignore' });
+  const map = JSON.parse(fs.readFileSync(path.join(fixture, 'map.json'), 'utf8'));
+  const sum = map.entries.find((e) => e.id === 'lem:sum');
+  sum.proof.sentences[1].steps.push({ decl: 'AuditFixture.isEven_of_isDoubled', quote: 'exact double_isEven k' });
+  const mapPath = path.join(dir, 'map.json');
+  fs.writeFileSync(mapPath, JSON.stringify(map));
+  const out = path.join(dir, 'extraction.json');
+  await extract({ mapPath, project, out });
+  const got = JSON.parse(fs.readFileSync(out, 'utf8'));
+  assert.deepEqual(got.traces['AuditFixture.isEven_of_isDoubled'].steps.map((s) => s.text), ['obtain ⟨k, rfl⟩ := h', 'exact double_isEven k']);
+  assert.deepEqual(got.traces['AuditFixture.even_add'].steps.map((s) => s.text.split(' ')[0]), ['obtain', 'have', 'obtain', 'refine', 'rw']);
+  // The helper is traced but stays a helper: uses still pass through it.
+  assert.deepEqual(got.declarations['AuditFixture.even_add'].uses.mapped, ['AuditFixture.double_isEven']);
+});
+
+test('every traced declaration of a module keeps its proof states', { skip, timeout: 600000 }, async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pla-lean-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const project = path.join(dir, 'lean');
+  fs.cpSync(path.join(fixture, 'lean'), project, { recursive: true, filter: (p) => !p.includes(`${path.sep}.lake`) });
+  execFileSync('lake', ['build'], { cwd: project, stdio: 'ignore' });
+  // Trace a second declaration of AuditFixture.Main that precedes even_add.
+  const map = JSON.parse(fs.readFileSync(path.join(fixture, 'map.json'), 'utf8'));
+  map.entries.push({ id: 'helper', paper: { quote: 'familiar' }, kind: 'formalizes',
+    lean: ['AuditFixture.isEven_of_isDoubled'], proof: { sentences: [] } });
+  const mapPath = path.join(dir, 'map.json');
+  fs.writeFileSync(mapPath, JSON.stringify(map));
+  const out = path.join(dir, 'extraction.json');
+  await extract({ mapPath, project, out });
+  const traces = JSON.parse(fs.readFileSync(out, 'utf8')).traces;
+  assert.deepEqual(traces['AuditFixture.isEven_of_isDoubled'].steps.map((s) => s.text.split(' ')[0]), ['obtain', 'exact']);
+  assert.equal(traces['AuditFixture.even_add'].steps.length, 5);
 });

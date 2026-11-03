@@ -7,6 +7,9 @@ import katex from 'katex';
 const MATH_ENVS = new Set(['equation', 'equation*', 'align', 'align*', 'gather', 'gather*', 'multline', 'multline*']);
 const DROP_CMDS = new Set(['noindent', 'smallskip', 'medskip', 'bigskip', 'clearpage', 'newpage', 'hfill',
   'par', 'maketitle', 'AIreviewlegend', 'centering', 'small', 'normalfont', 'nonumber']);
+// Layout and bibliography commands, dropped together with their arguments:
+// they print nothing in an excerpt.
+const DROP_WITH_ARGS = new Map([['setlength', 2], ['bibliographystyle', 1], ['bibliography', 1]]);
 
 export function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -147,12 +150,14 @@ function transformMathEdits(source, variant, depth = 0) {
 }
 
 export class TexRenderer {
-  constructor({ macros, refs, cites, eqAuto, leanRefs = new Map() }) {
+  constructor({ macros, refs, cites, eqAuto, leanRefs = new Map(), leanCommands = [] }) {
     this.macros = macros;      // KaTeX macros
     this.refs = refs;          // label -> {text, href}
     this.cites = cites;        // key -> short label
     this.eqAuto = eqAuto;      // display-math environment start offset -> rendered tag
     this.leanRefs = leanRefs;  // TeX macro key -> pinned source URL
+    // Further \cmd{file}{line}{name} Lean reference commands, read like \leandecl.
+    this.leanCommands = new Set(leanCommands);
     this.warnings = [];
   }
 
@@ -268,9 +273,11 @@ export class TexRenderer {
           return { content, base: base + start + 1 };
         };
         const arg = () => readArg().content;
-        switch (name) {
+        switch (this.leanCommands.has(name) ? 'leandecl' : name) {
           case 'begin': {
             const env = arg();
+            // The appendix environment only switches numbering; an excerpt may hold only its start.
+            if (env === 'appendix') { i = j; continue; }
             const [endStart, endAfter] = findEnd(s, j, env);
             if (endStart < 0) {
               this.warnings.push(`unclosed environment \\begin{${env}}`);
@@ -357,6 +364,11 @@ export class TexRenderer {
             } else out += `<a href="${escapeHtml(url)}">${label}</a>`;
             i = j; continue;
           }
+          case 'url': {
+            const url = arg().trim();
+            out += /^https?:\/\/[^\s"<>]+$/.test(url) ? `<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>` : `<code>${escapeHtml(url)}</code>`;
+            i = j; continue;
+          }
           case 'nolinkurl': { const a = readArg(); out += `<code>${escapeHtml(a.content)}</code>`; i = j; continue; }
           case 'texorpdfstring': { const a = readArg(); readArg(); out += this.text(a.content, a.base); i = j; continue; }
           case 'string': {
@@ -401,6 +413,7 @@ export class TexRenderer {
           case 'LaTeX': out += 'LaTeX'; i = j; continue;
           default:
             if (DROP_CMDS.has(name)) { i = j; continue; }
+            if (DROP_WITH_ARGS.has(name)) { for (let k = 0; k < DROP_WITH_ARGS.get(name); k++) arg(); i = j; continue; }
             this.warnings.push(`kept unknown text command \\${name}`);
             out += `<code>\\${escapeHtml(name)}</code>`;
             i = j;

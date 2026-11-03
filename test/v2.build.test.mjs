@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from '../v2/build.mjs';
+import { loadMap, mapDeclarations, mapMapped, mapTraces } from '../v2/map.mjs';
 import { sentences, parsePaper, resolveQuote, maskComments } from '../v2/paper.mjs';
 import { stableStringify } from '../v2/util.mjs';
 
@@ -71,6 +72,29 @@ test('a paper environment without a map entry fails', (t) => {
   assert.ok(hasError(r, /Lemma 1\.2 \(line \d+\) has no map entry/), r.report.errors.join('\n'));
 });
 
+test('scope "front" covers the text before the first section, such as an abstract', (t) => {
+  const r = run(copy(t, {
+    paper: (p) => p.replace('\\begin{document}\n', '\n\\begin{document}\n\\begin{abstract}\nEvery double is even.\n\\end{abstract}\n\n'),
+    map: (m) => {
+      m.scope = { sections: ['front'] };
+      m.entries.push({ id: 'abstract', paper: { quote: 'Every double is even.' }, kind: 'prose', note: 'Summary.' });
+    },
+  }));
+  assert.deepEqual(r.report.errors, []);
+  assert.deepEqual(r.report.cards.map((c) => c.id), ['abstract']);
+  assert.doesNotMatch(r.html, /begin\{document\}/);
+});
+
+test('settings.lean_ref_commands renders further Lean reference commands like \\leandecl', (t) => {
+  const r = run(copy(t, {
+    paper: (p) => p.replace('Throughout,', 'See \\leanother{Other/File.lean}{7}{Other.thing}. Throughout,'),
+    map: (m) => { m.settings = { lean_ref_commands: ['leanother'] }; },
+  }));
+  assert.deepEqual(r.report.errors, []);
+  assert.match(r.html, /See <code>Other\.thing<\/code>\./);
+  assert.doesNotMatch(r.html, /\\leanother/);
+});
+
 test('a quote that is not verbatim in the paper fails', (t) => {
   const r = run(copy(t, { map: (m) => { entry(m, 'lem:sum').proof.sentences[0].quote = 'Write $m = 2a$.'; } }));
   assert.ok(hasError(r, /paper quote not found/));
@@ -125,9 +149,120 @@ test('cited and used results must agree unless the map records the difference', 
   assert.match(r2.html, /Cited, not used by Lean: <a href="#c-lem:double">Lemma 1.2<\/a> <span class="note">Lean proves this directly\./);
 });
 
+test('a sentence can follow the proof into a helper lemma the proof calls', (t) => {
+  // The helper isEven_of_isDoubled (Main.lean lines 10-12) with its trace.
+  const helper = 'AuditFixture.isEven_of_isDoubled';
+  const goal = (hyps, target) => [{ hyps, tag: '', target }];
+  const addHelper = (ex) => {
+    ex.declarations[helper] = { kind: 'theorem', module: 'AuditFixture.Main', file: 'AuditFixture/Main.lean',
+      range: { start: [10, 0], end: [12, 23] }, signature: 'AuditFixture.isEven_of_isDoubled {n : Nat} (h : IsDoubled n) : IsEven n',
+      source: 'theorem isEven_of_isDoubled {n : Nat} (h : IsDoubled n) : IsEven n := by\n  obtain ⟨k, rfl⟩ := h\n  exact double_isEven k',
+      context: [], deps: [], type_hash: '0', body_hash: '1', closure_hash: '0', unused: [],
+      uses: { mapped: ['AuditFixture.double_isEven'], helpers: [], library: [], via: {} } };
+    ex.traces[helper] = { steps: [
+      { index: 0, depth: 0, parent: null, kind: 'Lean.Parser.Tactic.obtain', range: { start: [11, 2], end: [11, 22] }, text: 'obtain ⟨k, rfl⟩ := h',
+        goals_before: goal([{ name: 'n', type: 'Nat' }, { name: 'h', type: 'IsDoubled n' }], 'IsEven n'),
+        goals_after: goal([{ name: 'k', type: 'Nat' }], 'IsEven 𝔡(k)'), uses_library: [], uses_project: [] },
+      { index: 1, depth: 0, parent: null, kind: 'Lean.Parser.Tactic.exact', range: { start: [12, 2], end: [12, 23] }, text: 'exact double_isEven k',
+        goals_before: goal([{ name: 'k', type: 'Nat' }], 'IsEven 𝔡(k)'), goals_after: [], uses_library: [], uses_project: ['AuditFixture.double_isEven'] }] };
+  };
+  // The proof's own steps of the sentence, without the fixture's anchor of the whole helper.
+  const own = (m) => { const st = entry(m, 'lem:sum').proof.sentences[1].steps; st.splice(st.findIndex((x) => x.decl === helper), 1); return st; };
+  const follow = (m) => { own(m).splice(1, 0, { decl: helper, quote: 'exact double_isEven k' }); };
+  const r = run(copy(t, { ex: addHelper, map: follow }));
+  assert.deepEqual(r.report.errors, []);
+  // The sentence shows the helper's state change, labelled with the helper.
+  assert.match(r.html, /<div class="in-decl">in <code title="AuditFixture.isEven_of_isDoubled">isEven_of_isDoubled<\/code><\/div><div class="goal closed">goal closed: <code>IsEven 𝔡\(k\)<\/code><\/div>/);
+  // The helper step no sentence claims is a Lean-added step, before the sentence.
+  assert.match(r.html, /Lean adds<\/span><\/div><div class="lean-col"><div class="in-decl">in <code[^>]*>isEven_of_isDoubled<\/code><\/div>[^]*?obtain ⟨k, rfl⟩ := h[^]*?By Lemma/);
+  const sum = r.report.cards.find((c) => c.id === 'lem:sum');
+  assert.equal(sum.account.lean_adds, 2);
+  assert.deepEqual(r.report.anchors['lem:sum.proof.sentences[1]'].steps.map((s) => s.decl ?? null), [null, helper, null]);
+  // A changed helper proof invalidates the card's fingerprint.
+  const r2 = run(copy(t, { ex: (ex) => { addHelper(ex); ex.declarations[helper].body_hash = '2'; }, map: follow }));
+  assert.notEqual(r2.report.cards.find((c) => c.id === 'lem:sum').fingerprint, sum.fingerprint);
+  // The extractor traces the helper but keeps computing uses through it.
+  const m = loadMap(copy(t, { map: follow }));
+  assert.ok(mapTraces(m).includes(helper) && mapDeclarations(m).includes(helper));
+  assert.ok(!mapMapped(m).includes(helper));
+  // "decl" alone claims the helper's whole proof, so nothing of it is added.
+  const whole = run(copy(t, { ex: addHelper, map: (m) => { own(m).splice(1, 0, { decl: helper }); } }));
+  assert.deepEqual(whole.report.errors, []);
+  assert.equal(whole.report.cards.find((c) => c.id === 'lem:sum').account.lean_adds, 1);
+  assert.deepEqual(whole.report.anchors['lem:sum.proof.sentences[1]'].steps.map((s) => s.decl ?? null), [null, helper, helper, null]);
+  // A helper proved by a term has no steps; "decl" alone shows its statement.
+  const term = run(copy(t, { ex: (ex) => { addHelper(ex); ex.traces[helper].steps = []; },
+    map: (m) => { own(m).splice(1, 0, { decl: helper }); } }));
+  assert.deepEqual(term.report.errors, []);
+  assert.match(term.html, /term proof of <code>AuditFixture.isEven_of_isDoubled \{n : Nat\}/);
+  // A helper without a trace fails.
+  const r3 = run(copy(t, { ex: (ex) => { addHelper(ex); delete ex.traces[helper]; }, map: follow }));
+  assert.ok(hasError(r3, /no proof-state trace for AuditFixture.isEven_of_isDoubled/));
+});
+
 test('a sentence covering more Lean steps than the threshold is a large step', (t) => {
   const r = run(copy(t, { map: (m) => { m.settings = { large_step: 1 }; } }));
-  assert.match(r.html, /large step: 2 Lean steps/);
+  // Two steps of even_add and the two steps of the helper isEven_of_isDoubled.
+  assert.match(r.html, /large step: 4 Lean steps/);
+});
+
+test('a sentence can name a helper declaration as a whole or a step inside it', (t) => {
+  const r = run(copy(t));
+  assert.deepEqual(r.report.errors, []);
+  // The whole helper: its state change from its statement, and the mapped result it uses.
+  assert.match(r.html, /<div class="in-decl">in <code title="AuditFixture.isEven_of_isDoubled">isEven_of_isDoubled<\/code><\/div><div class="goal closed">goal closed: <code>IsEven n<\/code>[^]*?uses [^]*?<a href="#c-lem:double">Lemma 1.2<\/a>/);
+  assert.deepEqual(r.report.anchors['lem:sum.proof.sentences[1]'].steps.map((x) => x.decl ?? null), [null, null, 'AuditFixture.isEven_of_isDoubled', 'AuditFixture.isEven_of_isDoubled']);
+  // The whole helper is claimed, so it adds no Lean-added steps, and uses stay transitive.
+  const sum = r.report.cards.find((c) => c.id === 'lem:sum');
+  assert.equal(sum.account.lean_adds, 1);
+  assert.deepEqual(sum.account.used, ['lem:double']);
+  const r2 = run(copy(t, { map: (m) => { entry(m, 'lem:sum').proof.sentences[1].steps[2] = { decl: 'AuditFixture.isEven_of_isDoubled', quote: 'exact double_isEven k' }; } }));
+  assert.deepEqual(r2.report.errors, []);
+  assert.match(r2.html, /in <code title="AuditFixture.isEven_of_isDoubled">isEven_of_isDoubled<\/code><\/div><div class="goal closed">goal closed/);
+  const r3 = run(copy(t, { map: (m) => { entry(m, 'lem:sum').proof.sentences[1].steps[2] = { decl: 'AuditFixture.isEven_of_isDoubled', quote: 'simp' }; } }));
+  assert.ok(hasError(r3, /Lean quote not found in AuditFixture.isEven_of_isDoubled/));
+  const r4 = run(copy(t, { map: (m) => { entry(m, 'lem:sum').proof.sentences[1].steps[2] = { decl: 'AuditFixture.missing' }; } }));
+  assert.ok(hasError(r4, /AuditFixture.missing not found in the extraction/));
+});
+
+test('a printed proof in the running text is mapped sentence by sentence', (t) => {
+  const paper = (p) => p.replace('\\begin{proof}\nBy definition, $\\dbl(k)=2k$ is of the required form.\n\\end{proof}',
+    'We now prove Lemma~\\ref{lem:double}. By definition, $\\dbl(k)=2k$ is of the required form. This ends the argument.');
+  const runningText = (m) => {
+    const e = entry(m, 'lem:double');
+    e.proof.paper = { quote: 'By definition' };
+    e.proof.end = { quote: 'This ends the argument.' };
+    e.proof.sentences.push({ quote: 'This ends the argument.', kind: 'prose', note: 'End of the argument.' });
+  };
+  const r = run(copy(t, { paper }));
+  assert.ok(hasError(r, /lem:double: map has a proof, but no printed proof follows/));
+  // A separate passage card for the proof.
+  const passage = (m) => {
+    runningText(m);
+    const e = entry(m, 'lem:double');
+    m.entries.push({ id: 'proof:double', title: 'Proof of Lemma 1.2', paper: { quote: 'By definition' }, kind: 'formalizes', lean: e.lean, proof: e.proof });
+    delete e.proof;
+  };
+  const r2 = run(copy(t, { paper, map: passage }));
+  assert.ok(!hasError(r2, /proof:double/), r2.report.errors.join('\n'));
+  const card = r2.report.cards.find((c) => c.id === 'proof:double');
+  assert.deepEqual(card.account && [card.account.sentences, card.account.matched, card.account.prose], [2, 1, 1]);
+  assert.match(r2.html, /id="c-proof:double"[^]*?printed as running text[^]*?By definition/);
+  // The running text before the proof stays paper text, outside the card.
+  assert.match(r2.html, /We now prove Lemma[^]*?id="c-proof:double"/);
+  const r3 = run(copy(t, { paper, map: (m) => { passage(m); entry(m, 'proof:double').proof.end = { quote: 'nowhere' }; } }));
+  assert.ok(hasError(r3, /proof:double: proof end anchor quote not found/));
+});
+
+test('a prose sentence does not pull later Lean-added steps ahead of it', (t) => {
+  const r = run(copy(t, { map: (m) => {
+    const s = entry(m, 'lem:sum').proof.sentences[0];
+    s.kind = 'prose'; s.note = 'Notation.'; delete s.steps;
+  } }));
+  assert.deepEqual(r.report.errors, []);
+  const h = r.html.slice(r.html.indexOf('Lean: <code>AuditFixture.even_add</code>'));
+  assert.ok(h.indexOf('Write') < h.indexOf('Lean adds'));
+  assert.ok(h.indexOf('By Lemma') < h.indexOf('Lean names the witness'));
 });
 
 test('sync against a previous report lists moved, new and broken anchors', (t) => {
@@ -168,6 +303,39 @@ test('sentences: abbreviations, displays and inline mathematics', () => {
   const text = 'Write $m=2a$. By Lemma~1, $n$ is even, i.e.\\ $n=2b$. Then\n\\begin{equation}\nx=y.\n\\end{equation}\nThis is it. See Prop. 3 for more.';
   const s = sentences(text, 0, text.length).map((x) => text.slice(x.start, x.end));
   assert.deepEqual(s, ['Write $m=2a$.', 'By Lemma~1, $n$ is even, i.e.\\ $n=2b$.', 'Then\n\\begin{equation}\nx=y.\n\\end{equation}', 'This is it.', 'See Prop. 3 for more.']);
+});
+
+test('sentences: a display that ends with a period and a long label ends the sentence', () => {
+  const text = 'We show\n\\begin{equation} a=b.\n \\label{eq:a-rather-long-label}\\end{equation}\nThe inclusion holds.';
+  const s = sentences(text, 0, text.length).map((x) => text.slice(x.start, x.end));
+  assert.deepEqual(s, ['We show\n\\begin{equation} a=b.\n \\label{eq:a-rather-long-label}\\end{equation}', 'The inclusion holds.']);
+});
+
+test('sentences: list markup belongs to neither the first nor the last item', () => {
+  const text = 'Two facts:\n\\begin{itemize}\n\\item $a=b$.\n\\item $c=d$.\n\\end{itemize}\n\nHence the claim.';
+  const s = sentences(text, 0, text.length).map((x) => text.slice(x.start, x.end));
+  assert.deepEqual(s, ['Two facts:', '\\item $a=b$.', '\\item $c=d$.', 'Hence the claim.']);
+});
+
+test('a proof row holding a list item renders without an unclosed list', (t) => {
+  const r = run(copy(t, {
+    paper: (p) => p.replace('This is the familiar argument.', 'Two remarks:\n\\begin{itemize}\n\\item This is the familiar argument.\n\\item It is short.\n\\end{itemize}'),
+    map: (m) => { entry(m, 'lem:sum').proof.sentences.push({ quote: 'It is short.', kind: 'prose', note: 'A remark.' }, { quote: 'Two remarks:', kind: 'prose', note: 'A remark.' }); },
+  }));
+  assert.deepEqual(r.report.errors, []);
+  assert.ok(!r.report.warnings.some((w) => /unclosed environment/.test(w)), r.report.warnings.join('; '));
+});
+
+test('sentences: list delimiters, forced line breaks and periods ending inline mathematics', () => {
+  const text = 'We check:\n\n\\begin{itemize}\n\\item $a$ holds.\n\\item $b$ holds.\n\\end{itemize}\nBy both, $c$.';
+  const s = sentences(text, 0, text.length).map((x) => text.slice(x.start, x.end));
+  assert.deepEqual(s, ['We check:', '\\item $a$ holds.', '\\item $b$ holds.', 'By both, $c$.']);
+  const text2 = '\\begin{itemize}\n\\item $a$ holds\n\\end{itemize}\n\n\\\\ Then $c$.';
+  assert.deepEqual(sentences(text2, 0, text2.length).map((x) => text2.slice(x.start, x.end)), ['\\item $a$ holds', 'Then $c$.']);
+  const text3 = 'So $d$ kills $t$.\\\\\n$(d, 0)$ lies in $M$.';
+  assert.deepEqual(sentences(text3, 0, text3.length).map((x) => text3.slice(x.start, x.end)), ['So $d$ kills $t$.', '$(d, 0)$ lies in $M$.']);
+  const text4 = 'Hence $tm = 0.$ Specifically, $d$ works. Also $x = 1.$ and $y$ is $2.$\\\\ Done.';
+  assert.deepEqual(sentences(text4, 0, text4.length).map((x) => text4.slice(x.start, x.end)), ['Hence $tm = 0.$', 'Specifically, $d$ works.', 'Also $x = 1.$ and $y$ is $2.$', 'Done.']);
 });
 
 test('environment numbers follow shared counters and section resets', () => {

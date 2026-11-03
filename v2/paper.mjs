@@ -236,10 +236,13 @@ export function sentences(text, from, to) {
   let start = from;
   let braces = 0;
   let math = null; // '$', '$$', '\\(', '\\[', or an environment name
+  // List delimiters and forced line breaks at the start of a span belong to no sentence.
+  const lead = /^(?:\s+|\\(?:begin|end)\s*\{(?:itemize|enumerate|description)\}|\\\\)/;
+  const trail = /(?:\s+|\\(?:begin|end)\s*\{(?:itemize|enumerate|description)\}|\\\\)$/;
   const push = (end) => {
     let a = start, b = end;
-    while (a < b && /\s/.test(text[a])) a++;
-    while (b > a && /\s/.test(text[b - 1])) b--;
+    for (let m; a < b && (m = lead.exec(text.slice(a, Math.min(b, a + 40)))); ) a += m[0].length;
+    for (let m; b > a && (m = trail.exec(text.slice(Math.max(a, b - 40), b))); ) b -= m[0].length;
     if (b > a && /[^\s{}]/.test(text.slice(a, b))) out.push({ start: a, end: b });
     start = end;
   };
@@ -251,6 +254,8 @@ export function sentences(text, from, to) {
     if (text[i] === '.' && /^[A-Z]$/.test(word)) return false;
     if (text[i + 1] === '\\' && text[i + 2] === ' ') return false;
     if (text[i + 1] === '~') return false;
+    // A forced line break after the period ends the sentence.
+    if (text.startsWith('\\\\', i + 1)) return true;
     const j = nextNonSpace(i + 1);
     if (j >= to) return true;
     if (j === i + 1 && !/[}\s]/.test(text[i + 1])) return false;
@@ -267,8 +272,9 @@ export function sentences(text, from, to) {
         else if (env[1] === 'end' && math === name) {
           math = null;
           // A display that ends with a period inside ends the sentence.
-          const inner = text.slice(Math.max(from, i - 20), i).trimEnd();
-          if (/[.?!]\s*(?:\\label\{[^}]*\})?$/.test(inner) || /\.\s*$/.test(inner)) {
+          // The display's last characters, without a trailing \label of any length.
+          const inner = text.slice(Math.max(from, i - 200), i).replace(/\\label\s*\{[^{}]*\}\s*$/, '').trimEnd();
+          if (/[.?!]$/.test(inner)) {
             const j = i + env[0].length;
             if (nextNonSpace(j) >= to || /[A-Z\\$]/.test(text[nextNonSpace(j)])) { push(j); }
           }
@@ -292,7 +298,15 @@ export function sentences(text, from, to) {
     if (c === '$') {
       const dbl = text[i + 1] === '$';
       if (math === null) { math = dbl ? '$$' : '$'; if (dbl) i++; continue; }
-      if (math === '$' && !dbl) { math = null; continue; }
+      if (math === '$' && !dbl) {
+        math = null;
+        // A period that ends inline mathematics ends the sentence before a capital or a line break.
+        if (/\.\s*$/.test(text.slice(Math.max(from, i - 4), i))) {
+          const j = nextNonSpace(i + 1);
+          if (j >= to || /[A-Z]/.test(text[j]) || text.startsWith('\\\\', j)) push(i + 1);
+        }
+        continue;
+      }
       if (math === '$$' && dbl) { math = null; i++; continue; }
       continue;
     }

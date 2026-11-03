@@ -25,7 +25,9 @@ export function checkStepAnchor(where, a, errors) {
   if (!a || typeof a !== 'object') { errors.push(`${where}: step anchor must be an object`); return; }
   const hasPos = Array.isArray(a.at) && a.at.length === 2 && a.at.every(Number.isInteger);
   const hasQuote = typeof a.quote === 'string' && a.quote.length > 0;
-  if (hasPos === hasQuote) errors.push(`${where}: step anchor needs exactly one of "at": [line, column] or "quote"`);
+  // "decl" alone anchors the whole proof of that helper lemma.
+  if (hasPos && hasQuote || !hasPos && !hasQuote && !a.decl) errors.push(`${where}: step anchor needs exactly one of "at": [line, column] or "quote", or only "decl"`);
+  if (a.decl !== undefined && (typeof a.decl !== 'string' || !a.decl.length)) errors.push(`${where}: "decl" must be a declaration name`);
 }
 
 export function validateMap(map) {
@@ -48,6 +50,10 @@ export function validateMap(map) {
     if (e.proof) {
       if (e.kind === 'cites') errors.push(`${where}: a cited result has no printed proof to map`);
       if (e.proof.paper) checkQuote(`${where}.proof`, e.proof.paper, errors);
+      if (e.proof.end) {
+        if (!e.proof.paper) errors.push(`${where}.proof: "end" needs "paper", the start of the proof in the running text`);
+        checkQuote(`${where}.proof.end`, e.proof.end, errors);
+      }
       if (!Array.isArray(e.proof.sentences)) errors.push(`${where}.proof: sentences must be an array`);
       for (const [j, s] of (e.proof.sentences ?? []).entries()) {
         const sw = `${where}.proof.sentences[${j}]`;
@@ -73,7 +79,19 @@ export function validateMap(map) {
 // Declaration of the Lean proof that a proof entry follows.
 export const proofDecl = (e) => e.proof?.lean ?? e.lean?.[0];
 
-export function mapDeclarations(map) {
+// Helper declarations whose proofs a proof entry follows step by step: a step
+// anchor with "decl" names a lemma that the proof calls.
+export function stepDecls(e) {
+  const names = new Set();
+  for (const s of e.proof?.sentences ?? []) for (const a of s.steps ?? []) if (a.decl) names.add(a.decl);
+  for (const la of e.proof?.lean_adds ?? []) if (la.step?.decl) names.add(la.step.decl);
+  names.delete(proofDecl(e));
+  return [...names].sort();
+}
+
+// Declarations that are results of the map; uses are computed through every
+// other project lemma, including the step declarations.
+export function mapMapped(map) {
   const names = new Set();
   for (const e of map.entries) for (const n of e.lean ?? []) names.add(n);
   for (const l of map.lean_only ?? []) if (l.decl) names.add(l.decl);
@@ -81,6 +99,14 @@ export function mapDeclarations(map) {
   return [...names].sort();
 }
 
+export function mapDeclarations(map) {
+  const names = new Set(mapMapped(map));
+  for (const e of map.entries) if (e.proof) for (const n of stepDecls(e)) names.add(n);
+  return [...names].sort();
+}
+
 export function mapTraces(map) {
-  return [...new Set(map.entries.filter((e) => e.proof && proofDecl(e)).map(proofDecl))].sort();
+  const names = new Set();
+  for (const e of map.entries) if (e.proof && proofDecl(e)) { names.add(proofDecl(e)); for (const n of stepDecls(e)) names.add(n); }
+  return [...names].sort();
 }
