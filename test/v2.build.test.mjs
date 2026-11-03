@@ -219,6 +219,14 @@ test('sentences: abbreviations, displays and inline mathematics', () => {
   assert.deepEqual(s, ['Write $m=2a$.', 'By Lemma~1, $n$ is even, i.e.\\ $n=2b$.', 'Then\n\\begin{equation}\nx=y.\n\\end{equation}', 'This is it.', 'See Prop. 3 for more.']);
 });
 
+test('sentences: list delimiters are not sentences of their own', () => {
+  const text = 'We check:\n\n\\begin{itemize}\n\\item $a$ holds.\n\\item $b$ holds.\n\\end{itemize}\nBy both, $c$.';
+  const s = sentences(text, 0, text.length).map((x) => text.slice(x.start, x.end));
+  assert.deepEqual(s, ['We check:', '\\item $a$ holds.', '\\item $b$ holds.', 'By both, $c$.']);
+  const text2 = '\\begin{itemize}\n\\item $a$ holds\n\\end{itemize}\n\n\\\\ Then $c$.';
+  assert.deepEqual(sentences(text2, 0, text2.length).map((x) => text2.slice(x.start, x.end)), ['\\item $a$ holds', 'Then $c$.']);
+});
+
 test('environment numbers follow shared counters and section resets', () => {
   const doc = parsePaper(fs.readFileSync(path.join(fixture, 'paper.tex'), 'utf8'));
   assert.deepEqual(doc.envs.map((e) => `${e.title} ${e.number}`), ['Definition 1.1', 'Lemma 1.2', 'Lemma 1.3']);
