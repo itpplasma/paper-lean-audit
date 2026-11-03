@@ -381,8 +381,10 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
         if (!dsrc?.source) { errors.push(`${where}: no source for ${dn}`); return null; }
         if (!a.at && !a.quote) {
           const tops = steps.filter((x) => x.parentKey === null);
-          if (!tops.length) { errors.push(`${where}: ${dn} has no tactic steps to anchor`); return null; }
-          return tops;
+          if (tops.length) return tops;
+          // A term proof has no steps: the sentence is matched to the lemma's statement.
+          return [{ key: `${dn}#term`, decl: dn, index: -1, parentKey: null, term: true, text: dsrc.source,
+            range: dsrc.range, goals_before: [], goals_after: [], uses_project: [dn], uses_library: [] }];
         }
         let pos, endPos = null;
         if (a.at) pos = a.at;
@@ -478,7 +480,8 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
           leanCol += `<div class="state ${escapeHtml(m.s.kind)}">` + (m.s.kind !== 'formalizes' ? `<span class="badge ${escapeHtml(m.s.kind)}">${escapeHtml(m.s.kind)}</span> ` : '') +
             (isLarge ? `<span class="badge large">large step: ${count} Lean steps</span>` : '') +
             (m.s.note ? `<p class="note">${escapeHtml(m.s.note)}</p>` : '') +
-            parts.map((ps) => inDecl(ps) + renderGoalChange(ps[0].goals_before, ps.at(-1).goals_after)).join('') +
+            parts.map((ps) => ps[0].term ? `<div class="goal closed">term proof of <code>${escapeHtml(ex.declarations[ps[0].decl]?.signature ?? ps[0].decl)}</code></div>`
+              : inDecl(ps) + renderGoalChange(ps[0].goals_before, ps.at(-1).goals_after)).join('') +
             (top.length ? usesHtml(top, via) + tacticHtml(top) : '') + '</div>';
         }
         const id = rowId();

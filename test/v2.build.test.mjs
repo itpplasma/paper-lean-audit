@@ -188,6 +188,11 @@ test('a sentence can follow the proof into a helper lemma the proof calls', (t) 
   assert.deepEqual(whole.report.errors, []);
   assert.equal(whole.report.cards.find((c) => c.id === 'lem:sum').account.lean_adds, 1);
   assert.deepEqual(whole.report.anchors['lem:sum.proof.sentences[1]'].steps.map((s) => s.decl ?? null), [null, helper, helper, null]);
+  // A helper proved by a term has no steps; "decl" alone shows its statement.
+  const term = run(copy(t, { ex: (ex) => { addHelper(ex); ex.traces[helper].steps = []; },
+    map: (m) => { entry(m, 'lem:sum').proof.sentences[1].steps.splice(1, 0, { decl: helper }); } }));
+  assert.deepEqual(term.report.errors, []);
+  assert.match(term.html, /term proof of <code>AuditFixture.isEven_of_isDoubled \{n : Nat\}/);
   // A helper without a trace fails.
   const r3 = run(copy(t, { ex: (ex) => { addHelper(ex); delete ex.traces[helper]; }, map: follow }));
   assert.ok(hasError(r3, /no proof-state trace for AuditFixture.isEven_of_isDoubled/));
