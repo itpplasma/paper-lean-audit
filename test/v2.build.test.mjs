@@ -125,6 +125,12 @@ test('cited and used results must agree unless the map records the difference', 
   assert.match(r2.html, /Cited, not used by Lean: <a href="#c-lem:double">Lemma 1.2<\/a> <span class="note">Lean proves this directly\./);
 });
 
+test('a Lean identifier is linked only to a definition shown on some card', (t) => {
+  const r = run(copy(t, { ex: (ex) => { ex.context['AuditFixture.k'] = { ...ex.context['AuditFixture.double'], signature: 'AuditFixture.k : Nat' }; } }));
+  assert.doesNotMatch(r.html, /href="#d-AuditFixture\.k"/);
+  assert.match(r.html, /class="definition-link" href="#d-AuditFixture\.double"/);
+});
+
 test('a definition the Lean proof uses is not a result it uses', (t) => {
   const r = run(copy(t, { ex: (ex) => { ex.declarations['AuditFixture.even_add'].uses.mapped.push('AuditFixture.IsEven'); } }));
   assert.deepEqual(r.report.errors, []);

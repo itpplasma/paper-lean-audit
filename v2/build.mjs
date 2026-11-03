@@ -639,7 +639,7 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
   const meta = { stem, schema: 'paper-lean-audit/reader-2', paper: map.sources.paper.commit ?? null, formal: map.sources.formal.commit, cards: report.cards.map((c) => ({ id: c.id, fp: c.fingerprint })) };
   const src = map.sources;
   const errorBanner = report.errors.length ? `<div class="build-errors"><b>${report.errors.length} check${report.errors.length > 1 ? 's' : ''} failed.</b><ul>${report.errors.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>` : '';
-  const html = `<!doctype html>
+  const page = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(map.title ?? 'Paper and Lean')}</title>
 <style>${katexCss}</style><style>${css}</style></head>
@@ -655,6 +655,9 @@ ${graphHtml}</main>
 <script>${js}</script>
 </body></html>
 `;
+  // A definition link whose target is not shown on any card is left as text.
+  const ids = new Set([...page.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]));
+  const html = page.replace(/<a class="definition-link" href="#([^"]+)">([^<]*)<\/a>/g, (all, id, tok) => ids.has(id) ? all : tok);
   return { html, report, stem };
 }
 
