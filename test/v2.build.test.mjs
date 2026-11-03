@@ -125,6 +125,12 @@ test('cited and used results must agree unless the map records the difference', 
   assert.match(r2.html, /Cited, not used by Lean: <a href="#c-lem:double">Lemma 1.2<\/a> <span class="note">Lean proves this directly\./);
 });
 
+test('a definition the Lean proof uses is not a result it uses', (t) => {
+  const r = run(copy(t, { ex: (ex) => { ex.declarations['AuditFixture.even_add'].uses.mapped.push('AuditFixture.IsEven'); } }));
+  assert.deepEqual(r.report.errors, []);
+  assert.deepEqual(r.report.cards.find((c) => c.id === 'lem:sum').account.used, ['lem:double']);
+});
+
 test('a sentence covering more Lean steps than the threshold is a large step', (t) => {
   const r = run(copy(t, { map: (m) => { m.settings = { large_step: 1 }; } }));
   assert.match(r.html, /large step: 3 Lean steps/);

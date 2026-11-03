@@ -518,7 +518,8 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
       const used = new Map();
       for (const n of ex.declarations[decl]?.uses?.mapped ?? []) {
         const owner = entryByDecl.get(n);
-        if (owner && owner.id !== e.id) { const oc = cards.find((x) => x.id === owner.id); if (oc) used.set(owner.id, oc); }
+        // Definitions are not cited results, on either side of the comparison.
+        if (owner && owner.id !== e.id) { const oc = cards.find((x) => x.id === owner.id); if (oc && isResult(oc)) used.set(owner.id, oc); }
       }
       const onlyPaper = [...cited.keys()].filter((k) => !used.has(k)).sort();
       const onlyLean = [...used.keys()].filter((k) => !cited.has(k)).sort();
