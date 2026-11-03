@@ -460,7 +460,7 @@ partial def Ctx.collectSteps (c : Ctx) (fileMap : FileMap) (text : String) (t : 
 
 open Frontend in
 partial def traceLoop (inputCtx : Parser.InputContext) (tts : Array TraceTarget)
-  (lastStop : String.Pos.Raw) (skip : Bool) : FrontendM Unit := do
+  (lastStop : String.Pos.Raw) (skip : Bool) (acc : IO.Ref (Array InfoTree)) : FrontendM Unit := do
   updateCmdPos
   let s ← get
   if lastStop ≤ s.parserState.pos then return
@@ -478,7 +478,9 @@ partial def traceLoop (inputCtx : Parser.InputContext) (tts : Array TraceTarget)
       | h :: rest => { h with opts := h.opts.setBool `debug.byAsSorry (skip && !traced) } :: rest
       | [] => [] } }
   elabCommandAtFrontend cmd
-  unless Parser.isTerminalCommand cmd do traceLoop inputCtx tts lastStop skip
+  -- The command state keeps only the info trees of the last command.
+  if traced then acc.modify (· ++ (← get).commandState.infoState.trees.toArray)
+  unless Parser.isTerminalCommand cmd do traceLoop inputCtx tts lastStop skip acc
 
 open Frontend in
 /-- Re-elaborate `mod` from source with info trees and collect the tactic steps
@@ -504,14 +506,15 @@ def traceModule (cfg : Config) (mod : Name) (targets : Array (Name × Position �
   let (header, parserState, messages) ← Parser.parseHeader inputCtx
   let (env, messages) ← processHeader header opts messages inputCtx (mainModule := mod)
   let cmdState := { Command.mkState env messages opts with infoState := { enabled := true } }
-  let loop := traceLoop inputCtx tts lastStop cfg.skipEarlierProofs
+  let acc ← IO.mkRef #[]
+  let loop := traceLoop inputCtx tts lastStop cfg.skipEarlierProofs acc
   let ((), st) ← (loop { inputCtx }).run { commandState := cmdState, parserState, cmdPos := parserState.pos }
   let errs := st.commandState.messages.toList.filter (·.severity == .error)
   unless errs.isEmpty do
     let m ← errs.head!.toString
     throw (IO.userError s!"re-elaborating {mod} failed: {m}")
   let c : Ctx := { cfg, env := st.commandState.env }
-  let trees := st.commandState.infoState.trees.toArray
+  let trees ← acc.get
   let mut out := #[]
   for t in tts do
     out := out.push (t.name.toString, Json.mkObj [("steps", Json.arr (← c.collectSteps fileMap text t trees))])
