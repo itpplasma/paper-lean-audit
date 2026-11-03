@@ -23,4 +23,20 @@ npm test
 
 Use the starting link to review claims in paper order, then follow the previous/next links. The resume link returns to the last visited or edited claim. Export JSON to retain or share findings, checks and that position; import it to continue. Review notes stay in the browser until exported. Input or generator changes invalidate sign-offs while preserving notes. Browser-side notes are not shared collaboration state. Named definitions and source links improve inspection; neither an HTML badge nor a checklist is evidence of a theorem proof.
 
+## Side-by-side reader (map v2)
+
+`v2/` builds a second reader that puts each paper environment beside the Lean statement and its definitions, and each sentence of a printed proof beside the Lean proof state it corresponds to. The data come from Lean itself: `lean/Extract.lean` runs inside the target project's Lake environment and writes, for the declarations the map names, the pretty-printed statement, the project definitions it depends on down to a configured library boundary, fingerprints, binders the proof never uses, the mapped and library results the proof uses (also through unmapped helper lemmas) and, for traced proofs, every tactic step with its goals before and after and the results it used.
+
+```sh
+lake build                                  # in the Lean project, at the pinned commit
+node v2/extract.mjs --map map.json --project /path/to/lean --out extraction.json
+node v2/build.mjs --map map.json --out build --check
+```
+
+The map (`"schema": "paper-lean-audit/map-2"`) anchors the paper by exact quotes with an optional occurrence index and the Lean side by fully qualified names; a proof sentence names its tactic steps by a quoted Lean span or a `[line, column]` position. Each entry has a kind: `formalizes`, `cites` (a known result whose printed text gives no argument), `lean-only` or `prose` (with a note). `lean_only` lists Lean definitions without a paper counterpart, by name or name prefix, each with a note. `scope.sections` restricts the coverage checks to some top-level sections. See `test/fixtures/v2/` for a complete small example.
+
+`--check` fails on: a theorem-like environment without an entry; a quote, declaration or step anchor that does not resolve; a statement-context definition with neither a paper counterpart nor a `lean_only` entry; a printed proof or proof sentence without an entry; a proof whose cited results differ from the mapped results the Lean proof uses, unless `citations` records the difference; an extraction for another Lean commit; and two builds that differ. `--previous REPORT` lists moved, new and broken anchors. The graph section (Graphviz `dot`) draws the cards with paper and Lean edges and one graph per printed proof. Review marks are stored in the browser with each card's fingerprint and become invalid when it changes; export and import them as JSON.
+
+The extractor re-elaborates each module with traced proofs in its own process (a second import in one Lean process does not yield a usable environment) and, by default, replaces the proofs of the other declarations of that module by `sorry` (`lean.skip_earlier_proofs`); the kernel check remains the project's own build. Unused binders are found on the proof term, so a hypothesis that a tactic such as `subst` or `omega` carries along counts as used.
+
 Apache-2.0 covers the generator. Input manuscript excerpts and third-party packages retain their own licenses. See LICENSE and NOTICE.

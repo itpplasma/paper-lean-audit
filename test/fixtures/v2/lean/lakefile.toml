@@ -1,0 +1,5 @@
+name = "auditFixture"
+defaultTargets = ["AuditFixture"]
+
+[[lean_lib]]
+name = "AuditFixture"

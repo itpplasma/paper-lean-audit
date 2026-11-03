@@ -1,0 +1,31 @@
+{
+ "schema": "paper-lean-audit/map-2",
+ "title": "Even numbers: paper and Lean",
+ "output_stem": "fixture-reader",
+ "sources": {
+  "paper": {"repo": "example/paper", "commit": "0000000000000000000000000000000000000001", "file": "paper.tex", "snapshot": "paper.tex"},
+  "formal": {"repo": "example/formal", "commit": "0000000000000000000000000000000000000002"}
+ },
+ "lean": {"extraction": "extraction.json", "imports": ["AuditFixture"], "project_modules": ["AuditFixture"], "open": ["AuditFixture"]},
+ "entries": [
+  {"id": "def:even", "paper": {"quote": "\\label{def:even}"}, "kind": "formalizes",
+   "lean": ["AuditFixture.IsEven", "AuditFixture.double"]},
+  {"id": "lem:double", "paper": {"quote": "\\label{lem:double}"}, "kind": "formalizes",
+   "lean": ["AuditFixture.double_isEven"],
+   "proof": {"sentences": [
+    {"quote": "By definition", "kind": "formalizes", "steps": [{"quote": "exact ⟨k, rfl⟩"}]}]}},
+  {"id": "lem:sum", "paper": {"quote": "\\label{lem:sum}"}, "kind": "formalizes",
+   "lean": ["AuditFixture.even_add"],
+   "note": "Lean states the hypothesis on n as IsDoubled n and carries an extra hypothesis 0 < c that the proof never uses.",
+   "proof": {"sentences": [
+    {"quote": "Write $m=2a$.", "kind": "formalizes", "steps": [{"quote": "obtain ⟨a, rfl⟩ := hm"}]},
+    {"quote": "By Lemma~\\ref{lem:double}", "kind": "formalizes",
+     "steps": [{"quote": "have hb : IsEven n"}, {"quote": "obtain ⟨b, rfl⟩ := hb"}]},
+    {"quote": "m+n=2a+2b=2(a+b)", "kind": "formalizes", "steps": [{"quote": "rw [Nat.mul_add]"}]},
+    {"quote": "This is the familiar argument.", "kind": "prose", "note": "A remark on the argument; nothing to check."}],
+    "lean_adds": [{"step": {"quote": "refine ⟨a + b, ?_⟩"}, "note": "Lean names the witness a + b before the computation."}]}}
+ ],
+ "lean_only": [
+  {"decl": "AuditFixture.IsDoubled", "note": "Lean phrases \"n = d(b) for some b\" as a predicate."}
+ ]
+}

@@ -1,0 +1,683 @@
+{
+ "boundary": {
+  "boundary_modules": [],
+  "boundary_namespaces": [],
+  "project_modules": [
+   "AuditFixture"
+  ]
+ },
+ "context": {
+  "AuditFixture.IsDoubled": {
+   "body_hash": "9efed5bb15a7a074",
+   "deps": [
+    "AuditFixture.double"
+   ],
+   "doc": "A helper predicate that the paper never names.",
+   "file": "AuditFixture/Basic.lean",
+   "instance": false,
+   "kind": "def",
+   "module": "AuditFixture.Basic",
+   "range": {
+    "end": [
+     16,
+     47
+    ],
+    "start": [
+     15,
+     0
+    ]
+   },
+   "signature": "AuditFixture.IsDoubled (n : Nat) : Prop",
+   "source": "/-- A helper predicate that the paper never names. -/\ndef IsDoubled (n : Nat) : Prop := ∃ k, n = 𝔡(k)",
+   "type_hash": "d6ef051c598826b6"
+  },
+  "AuditFixture.IsEven": {
+   "body_hash": "59ee4e27909339bc",
+   "deps": [],
+   "doc": "A natural number is even if it is twice another one.",
+   "file": "AuditFixture/Basic.lean",
+   "instance": false,
+   "kind": "def",
+   "module": "AuditFixture.Basic",
+   "range": {
+    "end": [
+     8,
+     45
+    ],
+    "start": [
+     7,
+     0
+    ]
+   },
+   "signature": "AuditFixture.IsEven (n : Nat) : Prop",
+   "source": "/-- A natural number is even if it is twice another one. -/\ndef IsEven (n : Nat) : Prop := ∃ k, n = 2 * k",
+   "type_hash": "d6ef051c598826b6"
+  },
+  "AuditFixture.double": {
+   "body_hash": "95b63195392900ad",
+   "deps": [],
+   "doc": "Doubling, written with the project notation `𝔡(n)`.",
+   "file": "AuditFixture/Basic.lean",
+   "instance": false,
+   "kind": "def",
+   "module": "AuditFixture.Basic",
+   "range": {
+    "end": [
+     11,
+     35
+    ],
+    "start": [
+     10,
+     0
+    ]
+   },
+   "signature": "AuditFixture.double (n : Nat) : Nat",
+   "source": "/-- Doubling, written with the project notation `𝔡(n)`. -/\ndef double (n : Nat) : Nat := 2 * n",
+   "type_hash": "f221e4214794eafb"
+  }
+ },
+ "declarations": {
+  "AuditFixture.IsDoubled": {
+   "body_hash": "9efed5bb15a7a074",
+   "closure_hash": "0a62d36968eb3b4b",
+   "context": [
+    "AuditFixture.double"
+   ],
+   "deps": [
+    "AuditFixture.double"
+   ],
+   "doc": "A helper predicate that the paper never names.",
+   "file": "AuditFixture/Basic.lean",
+   "kind": "def",
+   "module": "AuditFixture.Basic",
+   "range": {
+    "end": [
+     16,
+     47
+    ],
+    "start": [
+     15,
+     0
+    ]
+   },
+   "signature": "AuditFixture.IsDoubled (n : Nat) : Prop",
+   "source": "/-- A helper predicate that the paper never names. -/\ndef IsDoubled (n : Nat) : Prop := ∃ k, n = 𝔡(k)",
+   "type_hash": "d6ef051c598826b6",
+   "unused": [],
+   "uses": {
+    "helpers": [],
+    "library": [],
+    "mapped": []
+   }
+  },
+  "AuditFixture.IsEven": {
+   "body_hash": "59ee4e27909339bc",
+   "closure_hash": "d6ef051c598826b6",
+   "context": [],
+   "deps": [],
+   "doc": "A natural number is even if it is twice another one.",
+   "file": "AuditFixture/Basic.lean",
+   "kind": "def",
+   "module": "AuditFixture.Basic",
+   "range": {
+    "end": [
+     8,
+     45
+    ],
+    "start": [
+     7,
+     0
+    ]
+   },
+   "signature": "AuditFixture.IsEven (n : Nat) : Prop",
+   "source": "/-- A natural number is even if it is twice another one. -/\ndef IsEven (n : Nat) : Prop := ∃ k, n = 2 * k",
+   "type_hash": "d6ef051c598826b6",
+   "unused": [],
+   "uses": {
+    "helpers": [],
+    "library": [],
+    "mapped": []
+   }
+  },
+  "AuditFixture.double": {
+   "body_hash": "95b63195392900ad",
+   "closure_hash": "f221e4214794eafb",
+   "context": [],
+   "deps": [],
+   "doc": "Doubling, written with the project notation `𝔡(n)`.",
+   "file": "AuditFixture/Basic.lean",
+   "kind": "def",
+   "module": "AuditFixture.Basic",
+   "range": {
+    "end": [
+     11,
+     35
+    ],
+    "start": [
+     10,
+     0
+    ]
+   },
+   "signature": "AuditFixture.double (n : Nat) : Nat",
+   "source": "/-- Doubling, written with the project notation `𝔡(n)`. -/\ndef double (n : Nat) : Nat := 2 * n",
+   "type_hash": "f221e4214794eafb",
+   "unused": [],
+   "uses": {
+    "helpers": [],
+    "library": [],
+    "mapped": []
+   }
+  },
+  "AuditFixture.double_isEven": {
+   "body_hash": "6177940be2ba1d0e",
+   "closure_hash": "8c6178ead3e06d6d",
+   "context": [
+    "AuditFixture.IsEven",
+    "AuditFixture.double"
+   ],
+   "deps": [
+    "AuditFixture.IsEven",
+    "AuditFixture.double"
+   ],
+   "file": "AuditFixture/Basic.lean",
+   "kind": "theorem",
+   "module": "AuditFixture.Basic",
+   "range": {
+    "end": [
+     19,
+     16
+    ],
+    "start": [
+     18,
+     0
+    ]
+   },
+   "signature": "AuditFixture.double_isEven (k : Nat) : IsEven 𝔡(k)",
+   "source": "theorem double_isEven (k : Nat) : IsEven (𝔡(k)) := by\n  exact ⟨k, rfl⟩",
+   "type_hash": "2132023aa332b23e",
+   "unfolded": "∀ (k : Nat), ∃ k_1, 2 * k = 2 * k_1",
+   "unused": [],
+   "uses": {
+    "helpers": [],
+    "library": [],
+    "mapped": [],
+    "via": {}
+   }
+  },
+  "AuditFixture.even_add": {
+   "body_hash": "5e1440731188e49e",
+   "closure_hash": "5a2ba3b64b2a2fcf",
+   "context": [
+    "AuditFixture.IsDoubled",
+    "AuditFixture.IsEven",
+    "AuditFixture.double"
+   ],
+   "deps": [
+    "AuditFixture.IsDoubled",
+    "AuditFixture.IsEven"
+   ],
+   "doc": "The sum of two even numbers is even. The hypothesis `hc` is never used.",
+   "file": "AuditFixture/Main.lean",
+   "kind": "theorem",
+   "module": "AuditFixture.Main",
+   "range": {
+    "end": [
+     21,
+     18
+    ],
+    "start": [
+     14,
+     0
+    ]
+   },
+   "signature": "AuditFixture.even_add (m n c : Nat) (hm : IsEven m) (hn : IsDoubled n) (hc : 0 < c) : IsEven (m + n)",
+   "source": "/-- The sum of two even numbers is even. The hypothesis `hc` is never used. -/\ntheorem even_add (m n c : Nat) (hm : IsEven m) (hn : IsDoubled n) (hc : 0 < c) :\n    IsEven (m + n) := by\n  obtain ⟨a, rfl⟩ := hm\n  have hb : IsEven n := isEven_of_isDoubled hn\n  obtain ⟨b, rfl⟩ := hb\n  refine ⟨a + b, ?_⟩\n  rw [Nat.mul_add]",
+   "type_hash": "5f9bcc2dbf7b77c9",
+   "unfolded": "∀ (m n c : Nat), (∃ k, m = 2 * k) → (∃ k, n = 2 * k) → 0 < c → ∃ k, m + n = 2 * k",
+   "unused": [
+    {
+     "binder": "explicit",
+     "in_statement": false,
+     "index": 5,
+     "name": "hc",
+     "prop": true,
+     "type": "0 < c"
+    }
+   ],
+   "uses": {
+    "helpers": [
+     "AuditFixture.isEven_of_isDoubled"
+    ],
+    "library": [
+     "Eq.symm",
+     "Nat.mul_add",
+     "congrArg"
+    ],
+    "mapped": [
+     "AuditFixture.double_isEven"
+    ],
+    "via": {
+     "AuditFixture.isEven_of_isDoubled": [
+      "AuditFixture.double_isEven"
+     ]
+    }
+   }
+  }
+ },
+ "environment": {
+  "commit": null,
+  "dirty": null,
+  "imports": [
+   "AuditFixture"
+  ],
+  "lean_githash": "470d5ce1400764999581fd26d5d72b00d990b0f4",
+  "lean_version": "4.35.0-rc3",
+  "manifest_sha256": "e263b39022a23c81e8f3c9e5c23bcff856cb2e0e9e12b540c3a043d49125c89b",
+  "toolchain": "leanprover/lean4:v4.35.0-rc3"
+ },
+ "schema": "paper-lean-audit/extraction-1",
+ "traces": {
+  "AuditFixture.double_isEven": {
+   "steps": [
+    {
+     "depth": 0,
+     "goals_after": [],
+     "goals_before": [
+      {
+       "hyps": [
+        {
+         "name": "k",
+         "type": "Nat"
+        }
+       ],
+       "tag": "",
+       "target": "IsEven 𝔡(k)"
+      }
+     ],
+     "index": 0,
+     "kind": "Lean.Parser.Tactic.exact",
+     "parent": null,
+     "range": {
+      "end": [
+       19,
+       16
+      ],
+      "start": [
+       19,
+       2
+      ]
+     },
+     "text": "exact ⟨k, rfl⟩",
+     "uses_library": [],
+     "uses_project": []
+    }
+   ]
+  },
+  "AuditFixture.even_add": {
+   "steps": [
+    {
+     "depth": 0,
+     "goals_after": [
+      {
+       "hyps": [
+        {
+         "name": "n",
+         "type": "Nat"
+        },
+        {
+         "name": "c",
+         "type": "Nat"
+        },
+        {
+         "name": "hn",
+         "type": "IsDoubled n"
+        },
+        {
+         "name": "hc",
+         "type": "0 < c"
+        },
+        {
+         "name": "a",
+         "type": "Nat"
+        }
+       ],
+       "tag": "",
+       "target": "IsEven (2 * a + n)"
+      }
+     ],
+     "goals_before": [
+      {
+       "hyps": [
+        {
+         "name": "m",
+         "type": "Nat"
+        },
+        {
+         "name": "n",
+         "type": "Nat"
+        },
+        {
+         "name": "c",
+         "type": "Nat"
+        },
+        {
+         "name": "hm",
+         "type": "IsEven m"
+        },
+        {
+         "name": "hn",
+         "type": "IsDoubled n"
+        },
+        {
+         "name": "hc",
+         "type": "0 < c"
+        }
+       ],
+       "tag": "",
+       "target": "IsEven (m + n)"
+      }
+     ],
+     "index": 0,
+     "kind": "Lean.Parser.Tactic.obtain",
+     "parent": null,
+     "range": {
+      "end": [
+       17,
+       23
+      ],
+      "start": [
+       17,
+       2
+      ]
+     },
+     "text": "obtain ⟨a, rfl⟩ := hm",
+     "uses_library": [],
+     "uses_project": []
+    },
+    {
+     "depth": 0,
+     "goals_after": [
+      {
+       "hyps": [
+        {
+         "name": "n",
+         "type": "Nat"
+        },
+        {
+         "name": "c",
+         "type": "Nat"
+        },
+        {
+         "name": "hn",
+         "type": "IsDoubled n"
+        },
+        {
+         "name": "hc",
+         "type": "0 < c"
+        },
+        {
+         "name": "a",
+         "type": "Nat"
+        },
+        {
+         "name": "hb",
+         "type": "IsEven n"
+        }
+       ],
+       "tag": "",
+       "target": "IsEven (2 * a + n)"
+      }
+     ],
+     "goals_before": [
+      {
+       "hyps": [
+        {
+         "name": "n",
+         "type": "Nat"
+        },
+        {
+         "name": "c",
+         "type": "Nat"
+        },
+        {
+         "name": "hn",
+         "type": "IsDoubled n"
+        },
+        {
+         "name": "hc",
+         "type": "0 < c"
+        },
+        {
+         "name": "a",
+         "type": "Nat"
+        }
+       ],
+       "tag": "",
+       "target": "IsEven (2 * a + n)"
+      }
+     ],
+     "index": 1,
+     "kind": "Lean.Parser.Tactic.tacticHave__",
+     "parent": null,
+     "range": {
+      "end": [
+       18,
+       46
+      ],
+      "start": [
+       18,
+       2
+      ]
+     },
+     "text": "have hb : IsEven n := isEven_of_isDoubled hn",
+     "uses_library": [],
+     "uses_project": [
+      "AuditFixture.isEven_of_isDoubled"
+     ]
+    },
+    {
+     "depth": 0,
+     "goals_after": [
+      {
+       "hyps": [
+        {
+         "name": "c",
+         "type": "Nat"
+        },
+        {
+         "name": "hc",
+         "type": "0 < c"
+        },
+        {
+         "name": "a",
+         "type": "Nat"
+        },
+        {
+         "name": "b",
+         "type": "Nat"
+        },
+        {
+         "name": "hn",
+         "type": "IsDoubled (2 * b)"
+        }
+       ],
+       "tag": "",
+       "target": "IsEven (2 * a + 2 * b)"
+      }
+     ],
+     "goals_before": [
+      {
+       "hyps": [
+        {
+         "name": "n",
+         "type": "Nat"
+        },
+        {
+         "name": "c",
+         "type": "Nat"
+        },
+        {
+         "name": "hn",
+         "type": "IsDoubled n"
+        },
+        {
+         "name": "hc",
+         "type": "0 < c"
+        },
+        {
+         "name": "a",
+         "type": "Nat"
+        },
+        {
+         "name": "hb",
+         "type": "IsEven n"
+        }
+       ],
+       "tag": "",
+       "target": "IsEven (2 * a + n)"
+      }
+     ],
+     "index": 2,
+     "kind": "Lean.Parser.Tactic.obtain",
+     "parent": null,
+     "range": {
+      "end": [
+       19,
+       23
+      ],
+      "start": [
+       19,
+       2
+      ]
+     },
+     "text": "obtain ⟨b, rfl⟩ := hb",
+     "uses_library": [],
+     "uses_project": []
+    },
+    {
+     "depth": 0,
+     "goals_after": [
+      {
+       "hyps": [
+        {
+         "name": "c",
+         "type": "Nat"
+        },
+        {
+         "name": "hc",
+         "type": "0 < c"
+        },
+        {
+         "name": "a",
+         "type": "Nat"
+        },
+        {
+         "name": "b",
+         "type": "Nat"
+        },
+        {
+         "name": "hn",
+         "type": "IsDoubled (2 * b)"
+        }
+       ],
+       "tag": "",
+       "target": "2 * a + 2 * b = 2 * (a + b)"
+      }
+     ],
+     "goals_before": [
+      {
+       "hyps": [
+        {
+         "name": "c",
+         "type": "Nat"
+        },
+        {
+         "name": "hc",
+         "type": "0 < c"
+        },
+        {
+         "name": "a",
+         "type": "Nat"
+        },
+        {
+         "name": "b",
+         "type": "Nat"
+        },
+        {
+         "name": "hn",
+         "type": "IsDoubled (2 * b)"
+        }
+       ],
+       "tag": "",
+       "target": "IsEven (2 * a + 2 * b)"
+      }
+     ],
+     "index": 3,
+     "kind": "Lean.Parser.Tactic.refine",
+     "parent": null,
+     "range": {
+      "end": [
+       20,
+       20
+      ],
+      "start": [
+       20,
+       2
+      ]
+     },
+     "text": "refine ⟨a + b, ?_⟩",
+     "uses_library": [],
+     "uses_project": []
+    },
+    {
+     "depth": 0,
+     "goals_after": [],
+     "goals_before": [
+      {
+       "hyps": [
+        {
+         "name": "c",
+         "type": "Nat"
+        },
+        {
+         "name": "hc",
+         "type": "0 < c"
+        },
+        {
+         "name": "a",
+         "type": "Nat"
+        },
+        {
+         "name": "b",
+         "type": "Nat"
+        },
+        {
+         "name": "hn",
+         "type": "IsDoubled (2 * b)"
+        }
+       ],
+       "tag": "",
+       "target": "2 * a + 2 * b = 2 * (a + b)"
+      }
+     ],
+     "index": 4,
+     "kind": "Lean.Parser.Tactic.rwSeq",
+     "parent": null,
+     "range": {
+      "end": [
+       21,
+       18
+      ],
+      "start": [
+       21,
+       2
+      ]
+     },
+     "text": "rw [Nat.mul_add]",
+     "uses_library": [],
+     "uses_project": []
+    }
+   ]
+  }
+ }
+}
