@@ -297,7 +297,15 @@ export function sentences(text, from, to) {
     if (c === '$') {
       const dbl = text[i + 1] === '$';
       if (math === null) { math = dbl ? '$$' : '$'; if (dbl) i++; continue; }
-      if (math === '$' && !dbl) { math = null; continue; }
+      if (math === '$' && !dbl) {
+        math = null;
+        // A period that ends inline mathematics ends the sentence before a capital or a line break.
+        if (/\.\s*$/.test(text.slice(Math.max(from, i - 4), i))) {
+          const j = nextNonSpace(i + 1);
+          if (j >= to || /[A-Z]/.test(text[j]) || text.startsWith('\\\\', j)) push(i + 1);
+        }
+        continue;
+      }
       if (math === '$$' && dbl) { math = null; i++; continue; }
       continue;
     }

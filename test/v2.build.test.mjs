@@ -219,7 +219,7 @@ test('sentences: abbreviations, displays and inline mathematics', () => {
   assert.deepEqual(s, ['Write $m=2a$.', 'By Lemma~1, $n$ is even, i.e.\\ $n=2b$.', 'Then\n\\begin{equation}\nx=y.\n\\end{equation}', 'This is it.', 'See Prop. 3 for more.']);
 });
 
-test('sentences: list delimiters are not sentences of their own', () => {
+test('sentences: list delimiters, forced line breaks and periods ending inline mathematics', () => {
   const text = 'We check:\n\n\\begin{itemize}\n\\item $a$ holds.\n\\item $b$ holds.\n\\end{itemize}\nBy both, $c$.';
   const s = sentences(text, 0, text.length).map((x) => text.slice(x.start, x.end));
   assert.deepEqual(s, ['We check:', '\\item $a$ holds.', '\\item $b$ holds.', 'By both, $c$.']);
@@ -227,6 +227,8 @@ test('sentences: list delimiters are not sentences of their own', () => {
   assert.deepEqual(sentences(text2, 0, text2.length).map((x) => text2.slice(x.start, x.end)), ['\\item $a$ holds', 'Then $c$.']);
   const text3 = 'So $d$ kills $t$.\\\\\n$(d, 0)$ lies in $M$.';
   assert.deepEqual(sentences(text3, 0, text3.length).map((x) => text3.slice(x.start, x.end)), ['So $d$ kills $t$.', '$(d, 0)$ lies in $M$.']);
+  const text4 = 'Hence $tm = 0.$ Specifically, $d$ works. Also $x = 1.$ and $y$ is $2.$\\\\ Done.';
+  assert.deepEqual(sentences(text4, 0, text4.length).map((x) => text4.slice(x.start, x.end)), ['Hence $tm = 0.$', 'Specifically, $d$ works.', 'Also $x = 1.$ and $y$ is $2.$', 'Done.']);
 });
 
 test('environment numbers follow shared counters and section resets', () => {
