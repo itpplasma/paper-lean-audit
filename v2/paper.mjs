@@ -254,6 +254,8 @@ export function sentences(text, from, to) {
     if (text[i] === '.' && /^[A-Z]$/.test(word)) return false;
     if (text[i + 1] === '\\' && text[i + 2] === ' ') return false;
     if (text[i + 1] === '~') return false;
+    // A forced line break after the period ends the sentence.
+    if (text.startsWith('\\\\', i + 1)) return true;
     const j = nextNonSpace(i + 1);
     if (j >= to) return true;
     if (j === i + 1 && !/[}\s]/.test(text[i + 1])) return false;

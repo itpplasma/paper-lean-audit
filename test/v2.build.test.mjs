@@ -225,6 +225,8 @@ test('sentences: list delimiters are not sentences of their own', () => {
   assert.deepEqual(s, ['We check:', '\\item $a$ holds.', '\\item $b$ holds.', 'By both, $c$.']);
   const text2 = '\\begin{itemize}\n\\item $a$ holds\n\\end{itemize}\n\n\\\\ Then $c$.';
   assert.deepEqual(sentences(text2, 0, text2.length).map((x) => text2.slice(x.start, x.end)), ['\\item $a$ holds', 'Then $c$.']);
+  const text3 = 'So $d$ kills $t$.\\\\\n$(d, 0)$ lies in $M$.';
+  assert.deepEqual(sentences(text3, 0, text3.length).map((x) => text3.slice(x.start, x.end)), ['So $d$ kills $t$.', '$(d, 0)$ lies in $M$.']);
 });
 
 test('environment numbers follow shared counters and section resets', () => {
