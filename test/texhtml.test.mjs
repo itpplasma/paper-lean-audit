@@ -145,6 +145,13 @@ test('layout, bibliography and appendix markers render nothing and raise no warn
   assert.deepEqual(r.warnings, []);
 });
 
+test('url links only http and https addresses', () => {
+  const r = renderer();
+  assert.equal(r.text(String.raw`\url{https://example.org/a}`), '<a href="https://example.org/a">https://example.org/a</a>');
+  assert.equal(r.text(String.raw`\url{javascript:alert(1)}`), '<code>javascript:alert(1)</code>');
+  assert.deepEqual(r.warnings, []);
+});
+
 test('unknown commands and hostile text stay visible without becoming HTML', () => {
   const r = renderer();
   const html = r.text(String.raw`\futurecmd{<img src=x onerror=alert(1)>}`);
