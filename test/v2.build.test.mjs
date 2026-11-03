@@ -170,7 +170,7 @@ test('a sentence can follow the proof into a helper lemma the proof calls', (t) 
   const r = run(copy(t, { ex: addHelper, map: follow }));
   assert.deepEqual(r.report.errors, []);
   // The sentence shows the helper's state change, labelled with the helper.
-  assert.match(r.html, /<div class="in-decl">in <code title="AuditFixture.isEven_of_isDoubled">isEven_of_isDoubled<\/code><\/div><div class="goal closed">goal closed<\/div>/);
+  assert.match(r.html, /<div class="in-decl">in <code title="AuditFixture.isEven_of_isDoubled">isEven_of_isDoubled<\/code><\/div><div class="goal closed">goal closed: <code>IsEven 𝔡\(k\)<\/code><\/div>/);
   // The helper step no sentence claims is a Lean-added step, before the sentence.
   assert.match(r.html, /Lean adds<\/span><\/div><div class="lean-col"><div class="in-decl">in <code[^>]*>isEven_of_isDoubled<\/code><\/div>[^]*?obtain ⟨k, rfl⟩ := h[^]*?By Lemma/);
   const sum = r.report.cards.find((c) => c.id === 'lem:sum');
