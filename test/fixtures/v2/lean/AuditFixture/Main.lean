@@ -18,6 +18,6 @@ theorem even_add (m n c : Nat) (hm : IsEven m) (hn : IsDoubled n) (hc : 0 < c) :
   have hb : IsEven n := isEven_of_isDoubled hn
   obtain ⟨b, rfl⟩ := hb
   refine ⟨a + b, ?_⟩
-  rw [Nat.mul_add]
+  · rw [Nat.mul_add]
 
 end AuditFixture

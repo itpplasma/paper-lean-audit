@@ -223,7 +223,7 @@
    "range": {
     "end": [
      21,
-     18
+     20
     ],
     "start": [
      14,
@@ -231,7 +231,7 @@
     ]
    },
    "signature": "AuditFixture.even_add (m n c : Nat) (hm : IsEven m) (hn : IsDoubled n) (hc : 0 < c) : IsEven (m + n)",
-   "source": "/-- The sum of two even numbers is even. The hypothesis `hc` is never used. -/\ntheorem even_add (m n c : Nat) (hm : IsEven m) (hn : IsDoubled n) (hc : 0 < c) :\n    IsEven (m + n) := by\n  obtain ⟨a, rfl⟩ := hm\n  have hb : IsEven n := isEven_of_isDoubled hn\n  obtain ⟨b, rfl⟩ := hb\n  refine ⟨a + b, ?_⟩\n  rw [Nat.mul_add]",
+   "source": "/-- The sum of two even numbers is even. The hypothesis `hc` is never used. -/\ntheorem even_add (m n c : Nat) (hm : IsEven m) (hn : IsDoubled n) (hc : 0 < c) :\n    IsEven (m + n) := by\n  obtain ⟨a, rfl⟩ := hm\n  have hb : IsEven n := isEven_of_isDoubled hn\n  obtain ⟨b, rfl⟩ := hb\n  refine ⟨a + b, ?_⟩\n  · rw [Nat.mul_add]",
    "type_hash": "5f9bcc2dbf7b77c9",
    "unfolded": "∀ (m n c : Nat), (∃ k, m = 2 * k) → (∃ k, n = 2 * k) → 0 < c → ∃ k, m + n = 2 * k",
    "unused": [
@@ -708,11 +708,11 @@
      "range": {
       "end": [
        21,
-       18
+       20
       ],
       "start": [
        21,
-       2
+       4
       ]
      },
      "text": "rw [Nat.mul_add]",
