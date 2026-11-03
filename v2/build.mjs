@@ -279,7 +279,7 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
       for (const h of added) parts.push(`<div class="hyp new"><span class="hn">${escapeHtml(h.name)}</span> : <code>${escapeHtml(h.type)}</code></div>`);
       if (removed.length) parts.push(`<div class="hyp gone">cleared: ${removed.map((h) => `<code>${escapeHtml(h.name)}</code>`).join(', ')}</div>`);
       if (a0.target !== b0.target || !added.length) parts.push(`<div class="goal">⊢ <code>${escapeHtml(a0.target)}</code></div>`);
-    } else if (b0 && after.length < before.length) parts.push('<div class="goal closed">goal closed</div>');
+    } else if (b0 && after.length < before.length) parts.push(`<div class="goal closed">goal closed: <code>${escapeHtml(b0.target)}</code></div>`);
     if (after.length > 1) parts.push(`<div class="more-goals">${after.length - 1} further goal${after.length > 2 ? 's' : ''}: ${after.slice(1).map((g) => `<code>${escapeHtml(g.target)}</code>`).join('; ')}</div>`);
     return parts.join('');
   };
