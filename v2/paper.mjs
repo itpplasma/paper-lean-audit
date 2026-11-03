@@ -267,8 +267,9 @@ export function sentences(text, from, to) {
         else if (env[1] === 'end' && math === name) {
           math = null;
           // A display that ends with a period inside ends the sentence.
-          const inner = text.slice(Math.max(from, i - 20), i).trimEnd();
-          if (/[.?!]\s*(?:\\label\{[^}]*\})?$/.test(inner) || /\.\s*$/.test(inner)) {
+          // The display's last characters, without a trailing \label of any length.
+          const inner = text.slice(Math.max(from, i - 200), i).replace(/\\label\s*\{[^{}]*\}\s*$/, '').trimEnd();
+          if (/[.?!]$/.test(inner)) {
             const j = i + env[0].length;
             if (nextNonSpace(j) >= to || /[A-Z\\$]/.test(text[nextNonSpace(j)])) { push(j); }
           }
