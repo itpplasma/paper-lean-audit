@@ -8,7 +8,9 @@
     "build": "node build.mjs",
     "check": "node build.mjs --check",
     "test": "node --test test/*.test.mjs",
-    "pdf": "node build.mjs --check --pdf"
+    "pdf": "node build.mjs --check --pdf",
+    "v2:extract": "node v2/extract.mjs",
+    "v2:build": "node v2/build.mjs"
   },
   "dependencies": {
     "katex": "0.18.10",

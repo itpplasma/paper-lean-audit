@@ -1,0 +1,30 @@
+\documentclass{amsart}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{definition}[theorem]{Definition}
+\numberwithin{equation}{section}
+\newcommand{\dbl}{\mathrm{d}}
+\begin{document}
+\section{Even numbers}\label{sec:even}
+Throughout, $m$, $n$ and $k$ are natural numbers.
+\begin{definition}\label{def:even}
+A number $n$ is \emph{even} if $n=2k$ for some $k$. We write $\dbl(k)=2k$.
+\end{definition}
+\begin{lemma}\label{lem:double}
+For every $k$, the number $\dbl(k)$ is even.
+\end{lemma}
+\begin{proof}
+By definition, $\dbl(k)=2k$ is of the required form.
+\end{proof}
+\begin{lemma}\label{lem:sum}
+If $m$ is even and $n=\dbl(b)$ for some $b$, then $m+n$ is even.
+\end{lemma}
+\begin{proof}
+Write $m=2a$. By Lemma~\ref{lem:double}, $n$ is even, i.e.\ $n=2b$.
+Then
+\begin{equation}\label{eq:sum}
+m+n=2a+2b=2(a+b).
+\end{equation}
+This is the familiar argument.
+\end{proof}
+\end{document}

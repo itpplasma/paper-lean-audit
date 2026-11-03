@@ -18,6 +18,10 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: sudo apt-get update && sudo apt-get install -y graphviz
+      - run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/v4.2.4/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
       - run: npm install --no-save playwright
       - run: npx playwright install --with-deps chromium
       - run: CHROMIUM_PATH=$(find /home/runner/.cache/ms-playwright -path '*/chrome-linux/chrome' -o -path '*/chrome-linux64/chrome' | head -1) npm test
