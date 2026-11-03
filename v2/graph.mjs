@@ -48,7 +48,7 @@ export function cardEdges({ cards, labelEntry, doc, refsIn, isResult }) {
     edges.get(k)[side] = true;
   };
   for (const c of cards) {
-    const spans = [[c.start, c.end]];
+    const spans = c.spans ?? [[c.start, c.end]];
     for (const [a, b] of spans) for (const r of refsIn(doc.text, a, b)) {
       const owner = labelEntry.get(r.label);
       if (owner && isResult(owner)) add(owner.id, c.id, 'paper');

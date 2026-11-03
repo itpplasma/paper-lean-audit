@@ -30,8 +30,12 @@ function texToPlain(s, refs) {
     .replace(/[$\\{}]/g, '').replace(/\s+/g, ' ').trim();
 }
 
+// Author notes between a statement and its proof do not separate them.
+const stripAiNotes = (t) => t.replace(/\\AI(?:add|comment)\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}(?:\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\})?/g, '');
+
 const cmpPos = (a, b) => a[0] - b[0] || a[1] - b[1];
 const shortName = (n) => n.split('.').slice(-1)[0];
+const partId = (c, k) => `p-${slug(c.id)}-${k}`;
 
 function readPaper(map, paperArg) {
   const src = map.sources.paper;
@@ -158,7 +162,7 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
     } else {
       const next = doc.proofs.find((p) => p.start >= c.env.end);
       if (next) {
-        const gap = doc.text.slice(c.env.end, next.start).replace(/\\AI(?:add|comment)\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}(?:\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\})?/g, '');
+        const gap = stripAiNotes(doc.text.slice(c.env.end, next.start));
         if (!gap.trim()) pf = next;
       }
     }
@@ -174,6 +178,30 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
     } else if (c.entry.proof) errors.push(`${c.id}: map has a proof, but no printed proof follows the statement; give proof.paper`);
   }
   for (const p of doc.proofs) if (inScope(p.start) && !proofOwner.has(p)) errors.push(`paper proof at line ${lineAt(raw, p.start)} belongs to no mapped statement`);
+  // A proof may contain environments of its own (lemmas stated and proved
+  // where they are used) and may stand apart from its statement. Its sentences
+  // are then those outside the nested environments and their proofs, and it is
+  // shown in parts at its own place in the paper, with the nested cards
+  // between the parts.
+  for (const c of cards) {
+    const pf = c.proofEnv;
+    if (!pf) continue;
+    const inner = cards.filter((o) => o !== c && o.env && o.env.start > pf.bodyStart && o.env.end <= pf.bodyEnd)
+      .map((o) => [o.env.start, o.proofEnv ? Math.max(o.env.end, o.proofEnv.end) : o.env.end]).sort((x, y) => x[0] - y[0]);
+    const holes = [];
+    for (const h of inner) if (!holes.length || h[0] >= holes.at(-1)[1]) holes.push(h);
+    const segments = [];
+    let a = pf.bodyStart;
+    for (const [hs, he] of holes) { segments.push([a, hs]); a = he; }
+    segments.push([a, pf.bodyEnd]);
+    c.proofHoles = holes;
+    c.proofSegments = segments;
+    const gap = stripAiNotes(doc.text.slice(c.env.end, pf.start));
+    c.proofApart = holes.length > 0 || pf.start < c.env.end || gap.trim() !== '';
+    if (c.proofApart) { c.end = c.env.end; c.spans = [[c.start, c.env.end], ...segments]; }
+    c.fpEnd = pf.end;
+  }
+  const inHole = (c, off) => (c.proofHoles ?? []).some(([a, b]) => off >= a && off < b);
 
   // ------------------------------------------------- refs and render ----
   const { eqAuto, labels: eqLabels } = equationTags(doc);
@@ -186,7 +214,9 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
   }
   for (const [l, info] of doc.labels) if (refs[l] && !refs[l].href) {
     const owner = cards.find((c) => info.at >= c.start && info.at < c.end);
-    if (owner) refs[l].href = `#c-${slug(owner.id)}`;
+    const part = cards.flatMap((c) => c.proofApart ? c.proofSegments.map(([a, b], k) => ({ c, a, b, k })) : []).find((x) => info.at >= x.a && info.at < x.b);
+    if (part) refs[l].href = `#${partId(part.c, part.k)}`;
+    else if (owner) refs[l].href = `#c-${slug(owner.id)}`;
   }
   const macros = { ...(map.macros ?? {}) };
   for (const m of doc.text.matchAll(/\\newcommand\s*\{(\\[A-Za-z]+)\}\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g)) if (!m[2].includes('#')) macros[m[1]] = m[2];
@@ -347,26 +377,37 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
     else left = renderTex(c.passage.start, c.passage.end);
 
     // Proof rows.
-    let proofHtml = '', account = null;
+    let proofHtml = '', account = null, proofParts = null;
     if (c.proofEnv && e.proof) {
       const pf = c.proofEnv;
       const decl = proofDecl(e);
-      const trace = ex.traces?.[decl]?.steps;
-      const dsrc = ex.declarations[decl];
-      if (!trace) errors.push(`${c.id}: no proof-state trace for ${decl}`);
-      const steps = trace ?? [];
-      const children = new Map();
-      for (const s of steps) if (s.parent !== null) { if (!children.has(s.parent)) children.set(s.parent, []); children.get(s.parent).push(s.index); }
-      const descendants = (i) => { const out = []; const st = [...(children.get(i) ?? [])]; while (st.length) { const j = st.pop(); out.push(j); st.push(...(children.get(j) ?? [])); } return out; };
+      if (!ex.traces?.[decl]?.steps) errors.push(`${c.id}: no proof-state trace for ${decl}`);
+      // Steps of the proof and of the step lemmas it calls, keyed by declaration.
+      const traced = new Map();
+      const traceOf = (dn) => {
+        if (traced.has(dn)) return traced.get(dn);
+        const steps = (ex.traces?.[dn]?.steps ?? []).map((x) => ({ ...x, decl: dn, key: dn + '#' + x.index }));
+        const children = new Map();
+        for (const x of steps) if (x.parent !== null) { if (!children.has(x.parent)) children.set(x.parent, []); children.get(x.parent).push(x.index); }
+        const t = { steps, children, src: ex.declarations[dn] };
+        traced.set(dn, t);
+        return t;
+      };
+      traceOf(decl);
+      const descendants = (s) => { const t = traceOf(s.decl); const out = []; const st = [...(t.children.get(s.index) ?? [])]; while (st.length) { const j = st.pop(); out.push(t.steps[j]?.index === j ? t.steps[j] : t.steps.find((x) => x.index === j)); st.push(...(t.children.get(j) ?? [])); } return out.filter(Boolean); };
       const resolveStep = (a, where) => {
-        if (!dsrc?.source) { errors.push(`${where}: no source for ${decl}`); return null; }
+        const dn = a.decl ?? decl;
+        const dsrc = ex.declarations[dn];
+        if (!dsrc?.source) { errors.push(`${where}: no source for ${dn}`); return null; }
+        if (dn !== decl && !ex.traces?.[dn]?.steps) { errors.push(`${where}: no proof-state trace for ${dn}`); return null; }
+        const { steps } = traceOf(dn);
         let pos, endPos = null;
         if (a.at) pos = a.at;
         else {
           const hits = [];
           for (let i = dsrc.source.indexOf(a.quote); i >= 0; i = dsrc.source.indexOf(a.quote, i + 1)) hits.push(i);
-          if (!hits.length) { errors.push(`${where}: Lean quote not found in ${decl}: ${JSON.stringify(a.quote)}`); return null; }
-          if (a.occurrence === undefined && hits.length > 1) { errors.push(`${where}: Lean quote occurs ${hits.length} times in ${decl}; give "occurrence"`); return null; }
+          if (!hits.length) { errors.push(`${where}: Lean quote not found in ${dn}: ${JSON.stringify(a.quote)}`); return null; }
+          if (a.occurrence === undefined && hits.length > 1) { errors.push(`${where}: Lean quote occurs ${hits.length} times in ${dn}; give "occurrence"`); return null; }
           const k = hits[(a.occurrence ?? 1) - 1];
           if (k === undefined) { errors.push(`${where}: Lean quote occurrence ${a.occurrence} not found`); return null; }
           pos = sourcePos(dsrc.source, dsrc.range.start, k);
@@ -377,32 +418,41 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
           const containing = steps.filter((x) => cmpPos(x.range.start, pos) <= 0 && cmpPos(endPos, x.range.end) <= 0);
           s = containing.sort((x, y) => y.depth - x.depth)[0];
         }
-        if (!s) { errors.push(`${where}: no tactic step of ${decl} at ${JSON.stringify(a.at ?? a.quote)}`); return null; }
+        if (!s) { errors.push(`${where}: no tactic step of ${dn} at ${JSON.stringify(a.at ?? a.quote)}`); return null; }
         return s;
       };
-      const sents = sentences(doc.text, pf.bodyStart, pf.bodyEnd);
+      const segments = c.proofSegments;
+      const sents = segments.flatMap(([a, b]) => sentences(doc.text, a, b));
       const mapped = [];
       for (const [j, s] of (e.proof.sentences ?? []).entries()) {
         const where = `${c.id}.proof.sentences[${j}]`;
         const r = resolveQuote(raw, s, pf.bodyStart, pf.bodyEnd, doc.text);
         if (r.error) { errors.push(`${where}: paper ${r.error}: ${JSON.stringify(s.quote)}`); continue; }
+        if (inHole(c, r.start)) { errors.push(`${where}: paper quote lies in an environment nested in the proof: ${JSON.stringify(s.quote)}`); continue; }
         const resolved = (s.steps ?? []).map((a, k) => resolveStep(a, `${where}.steps[${k}]`)).filter(Boolean);
         mapped.push({ s, r, steps: resolved, sentence: sents.find((x) => x.start <= r.start && r.start < x.end) ?? null });
-        report.anchors[where] = { paper: { start: r.start, line: lineAt(raw, r.start) }, steps: resolved.map((x) => ({ index: x.index, start: x.range.start })) };
+        report.anchors[where] = { paper: { start: r.start, line: lineAt(raw, r.start) }, steps: resolved.map((x) => ({ ...(x.decl !== decl ? { decl: x.decl } : {}), index: x.index, start: x.range.start })) };
       }
       for (const sn of sents) {
         if (!mapped.some((m) => m.sentence === sn)) errors.push(`${c.id}: proof sentence at line ${lineAt(raw, sn.start)} has no map entry: ${JSON.stringify(raw.slice(sn.start, Math.min(sn.end, sn.start + 90)))}`);
       }
       const claimed = new Set();
-      for (const m of mapped) for (const s of m.steps) { claimed.add(s.index); for (const d of descendants(s.index)) claimed.add(d); }
-      const hasClaimedDesc = (i) => descendants(i).some((d) => claimed.has(d));
-      const adds = steps.filter((s) => !claimed.has(s.index) && !hasClaimedDesc(s.index) && (s.parent === null || hasClaimedDesc(s.parent)));
+      for (const m of mapped) for (const s of m.steps) { claimed.add(s.key); for (const d of descendants(s)) claimed.add(d.key); }
+      const hasClaimedDesc = (s) => descendants(s).some((d) => claimed.has(d.key));
+      // Lean-added steps: in the proof and in every step lemma a sentence points into.
+      const touched = [decl, ...[...new Set(mapped.flatMap((m) => m.steps.map((s) => s.decl)))].filter((dn) => dn !== decl).sort()];
+      const adds = [];
+      for (const dn of touched) {
+        const t = traceOf(dn);
+        const parentOf = (s) => s.parent === null ? null : t.steps.find((x) => x.index === s.parent);
+        for (const s of t.steps) if (!claimed.has(s.key) && !hasClaimedDesc(s) && (s.parent === null || hasClaimedDesc(parentOf(s)))) adds.push(s);
+      }
       const addNotes = new Map();
       for (const [j, la] of (e.proof.lean_adds ?? []).entries()) {
         const s = resolveStep(la.step, `${c.id}.proof.lean_adds[${j}]`);
         if (!s) continue;
-        if (!adds.includes(s)) errors.push(`${c.id}.proof.lean_adds[${j}]: step ${s.index} is not a Lean-added step`);
-        addNotes.set(s.index, la.note);
+        if (!adds.some((x) => x.key === s.key)) errors.push(`${c.id}.proof.lean_adds[${j}]: step ${s.decl === decl ? '' : s.decl + ' '}${s.index} is not a Lean-added step`);
+        addNotes.set(s.key, la.note);
       }
       // Group sentences by paper sentence, in paper order.
       const groupsBySentence = [];
@@ -413,48 +463,55 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
       const proofRows = [];
       const rowId = () => `r-${slug(c.id)}-${proofRows.length}`;
       // A step's mapped results, directly or through unmapped helper lemmas.
-      const via = ex.declarations[decl]?.uses?.via ?? {};
-      const stepMapped = (ss) => [...new Set(ss.flatMap((x) => x.uses_project.flatMap((n) => entryByDecl.has(n) ? [n] : (via[n] ?? []))))];
+      const viaOf = (dn) => ex.declarations[dn]?.uses?.via ?? {};
+      const stepMapped = (ss) => [...new Set(ss.flatMap((x) => x.uses_project.flatMap((n) => entryByDecl.has(n) ? [n] : (viaOf(x.decl)[n] ?? viaOf(decl)[n] ?? []))))];
       const usesCards = (ss) => [...new Set(stepMapped(ss).map((n) => entryByDecl.get(n)?.id).filter((x) => x && x !== c.id))].sort();
-      const addRow = (s) => {
-        const note = addNotes.get(s.index);
+      const inDecl = (dn) => dn === decl ? '' : `<div class="in-decl">in <code title="${escapeHtml(dn)}">${escapeHtml(shortName(dn))}</code></div>`;
+      const addRow = (s, at) => {
+        const note = addNotes.get(s.key);
         const id = rowId();
         proofRows.push({ kind: 'lean-adds', label: 'Lean adds: ' + s.text.split('\n')[0].slice(0, 60), refs: [], uses: usesCards([s]), anchor: id });
-        return `<div class="row lean-adds" id="${id}"><div class="paper-col"><span class="badge lean-adds">Lean adds</span>${note ? ` <span class="note">${escapeHtml(note)}</span>` : ''}</div>` +
-          `<div class="lean-col">${renderGoalChange(s.goals_before, s.goals_after)}${usesHtml([s], via)}${tacticHtml([s])}</div></div>`;
+        rowsAt.push({ at, html: `<div class="row lean-adds" id="${id}"><div class="paper-col"><span class="badge lean-adds">Lean adds</span>${note ? ` <span class="note">${escapeHtml(note)}</span>` : ''}</div>` +
+          `<div class="lean-col">${inDecl(s.decl)}${renderGoalChange(s.goals_before, s.goals_after)}${usesHtml([s], viaOf(s.decl))}${tacticHtml([s])}</div></div>` });
       };
-      let rows = '';
+      const rowsAt = [];
       const placed = new Set();
       let large = 0, prose = 0, matched = 0;
       for (const [gi, g] of groupsBySentence.entries()) {
-        const upto = Math.min(...g.items.flatMap((m) => m.steps.map((s) => s.index)), Infinity);
-        for (const s of adds) if (!placed.has(s.index) && s.index < upto) { rows += addRow(s); placed.add(s.index); }
         const span = g.sentence ?? { start: g.items[0].r.start, end: g.items[0].r.end };
+        // A Lean-added step goes before the first sentence that uses a later step of its declaration.
+        const upto = new Map();
+        for (const st of g.items.flatMap((m) => m.steps)) upto.set(st.decl, Math.min(upto.get(st.decl) ?? Infinity, st.index));
+        for (const s of adds) if (!placed.has(s.key) && upto.has(s.decl) && s.index < upto.get(s.decl)) { addRow(s, span.start); placed.add(s.key); }
         let leanCol = '';
         for (const m of g.items) {
           if (m.s.kind === 'prose') { prose++; leanCol += `<div class="prose"><span class="badge prose">prose</span> ${escapeHtml(m.s.note)}</div>`; continue; }
           matched++;
-          const top = [...m.steps].sort((a, b) => a.index - b.index);
-          const count = new Set(top.flatMap((s) => [s.index, ...descendants(s.index)])).size;
+          const count = new Set(m.steps.flatMap((s) => [s.key, ...descendants(s).map((d) => d.key)])).size;
           const isLarge = count > settings.large_step;
           if (isLarge) large++;
-          const first = top[0], last = top.at(-1);
+          let body = '';
+          // One state change per declaration, in the order the sentence names them.
+          for (const dn of [...new Set(m.steps.map((s) => s.decl))]) {
+            const top = m.steps.filter((s) => s.decl === dn).sort((a, b) => a.index - b.index);
+            const first = top[0], last = top.at(-1);
+            body += inDecl(dn) + renderGoalChange(first.goals_before, last.goals_after) + usesHtml(top, viaOf(dn)) + tacticHtml(top);
+          }
           leanCol += `<div class="state ${escapeHtml(m.s.kind)}">` + (m.s.kind !== 'formalizes' ? `<span class="badge ${escapeHtml(m.s.kind)}">${escapeHtml(m.s.kind)}</span> ` : '') +
             (isLarge ? `<span class="badge large">large step: ${count} Lean steps</span>` : '') +
-            (m.s.note ? `<p class="note">${escapeHtml(m.s.note)}</p>` : '') +
-            (first ? renderGoalChange(first.goals_before, last.goals_after) + usesHtml(top, via) + tacticHtml(top) : '') + '</div>';
+            (m.s.note ? `<p class="note">${escapeHtml(m.s.note)}</p>` : '') + body + '</div>';
         }
         const id = rowId();
         const refsHere = [...new Set(refsIn(doc.text, span.start, span.end).map((r) => labelEntry.get(r.label)?.id).filter(Boolean))].sort();
         const kinds = g.items.map((m) => m.s.kind);
         proofRows.push({ kind: kinds.every((k) => k === 'prose') ? 'prose' : 'formalizes', label: texToPlain(raw.slice(span.start, span.end), refs).slice(0, 90),
           refs: refsHere, uses: usesCards(g.items.flatMap((m) => m.steps)), anchor: id });
-        rows += `<div class="row" id="${id}"><div class="paper-col">${renderTex(span.start, span.end)}</div><div class="lean-col">${leanCol}</div></div>`;
+        rowsAt.push({ at: span.start, html: `<div class="row" id="${id}"><div class="paper-col">${renderTex(span.start, span.end)}</div><div class="lean-col">${leanCol}</div></div>` });
       }
-      for (const s of adds) if (!placed.has(s.index)) { rows += addRow(s); placed.add(s.index); }
-      // Citations against Lean uses.
+      for (const s of adds) if (!placed.has(s.key)) { addRow(s, pf.bodyEnd - 1); placed.add(s.key); }
+      // Citations against Lean uses; the nested environments cite for themselves.
       const cited = new Map();
-      for (const r of refsIn(doc.text, pf.bodyStart, pf.bodyEnd)) {
+      for (const [a, b] of segments) for (const r of refsIn(doc.text, a, b)) {
         const owner = labelEntry.get(r.label);
         if (owner && owner !== c && isResult(owner)) cited.set(owner.id, owner);
       }
@@ -471,11 +528,28 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
       account = { sentences: sents.length, matched, prose, lean_adds: adds.length, large, cited: [...cited.keys()].sort(), used: [...used.keys()].sort(), only_paper: onlyPaper, only_lean: onlyLean };
       const link = (k) => { const x = cards.find((y) => y.id === k); return `<a href="#c-${slug(k)}">${escapeHtml(x ? cardTitle(x) : k)}</a>`; };
       const diff = (k) => `${link(k)}${notes[k] ? ` <span class="note">${escapeHtml(notes[k])}</span>` : ' <span class="badge missing">unexplained</span>'}`;
-      proofHtml = `<div class="proof"><div class="proof-head"><span class="env-head">Proof.</span> Lean: <code>${escapeHtml(decl)}</code></div>${rows}` +
-        `<div class="account"><b>Account.</b> ${sents.length} sentences: ${matched} matched, ${prose} prose; ${adds.length} Lean-added step${adds.length === 1 ? '' : 's'}; ${large} large step${large === 1 ? '' : 's'}.` +
+      const steps = [decl, ...touched.filter((dn) => dn !== decl)];
+      const head = `<span class="env-head">Proof.</span> Lean: <code>${escapeHtml(decl)}</code>` +
+        (steps.length > 1 ? `, with steps in ${steps.slice(1).map((dn) => `<code title="${escapeHtml(dn)}">${escapeHtml(shortName(dn))}</code>`).join(', ')}` : '');
+      const accountHtml = `<div class="account"><b>Account.</b> ${sents.length} sentences: ${matched} matched, ${prose} prose; ${adds.length} Lean-added step${adds.length === 1 ? '' : 's'}; ${large} large step${large === 1 ? '' : 's'}.` +
         ` Cited and used: ${both.length ? both.map(link).join(', ') : 'none'}.` +
         (onlyPaper.length ? ` <span class="one-sided">Cited, not used by Lean: ${onlyPaper.map(diff).join('; ')}.</span>` : '') +
-        (onlyLean.length ? ` <span class="one-sided">Used by Lean, not cited: ${onlyLean.map(diff).join('; ')}.</span>` : '') + '</div></div>';
+        (onlyLean.length ? ` <span class="one-sided">Used by Lean, not cited: ${onlyLean.map(diff).join('; ')}.</span>` : '') + '</div>';
+      const ordered = [...rowsAt].sort((x, y) => x.at - y.at);
+      if (!c.proofApart) {
+        proofHtml = `<div class="proof"><div class="proof-head">${head}</div>${ordered.map((x) => x.html).join('')}${accountHtml}</div>`;
+      } else {
+        // One part per stretch of the proof between nested environments.
+        proofParts = segments.map(([a, b], k) => {
+          const last = k === segments.length - 1;
+          const rows = ordered.filter((x) => x.at >= a && (x.at < b || (last && x.at <= b))).map((x) => x.html).join('');
+          const title = `Proof of ${cardTitle(c)}${k ? ' (continued)' : ''}`;
+          return { start: k ? a : pf.start, end: last ? pf.end : b,
+            html: `<section class="card proof-part" id="${partId(c, k)}" data-proof-of="${escapeHtml(c.id)}"><header><h3>${escapeHtml(title)}</h3>` +
+              `<a class="graph-link" href="#c-${slug(c.id)}" title="the statement">statement</a></header>` +
+              `<div class="proof">${k ? '' : `<div class="proof-head">${head}</div>`}${rows}${last ? accountHtml : ''}</div></section>` };
+        });
+      }
       c.proofRows = proofRows;
       if (adds.length) flags.push('Lean adds');
       if (large) flags.push('large step');
@@ -486,7 +560,7 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
       c.usedCards = usedCards;
     }
     const fp = sha256(stableStringify({
-      paper: raw.slice(c.start, c.end), kind: e.kind, note: e.note ?? null, proof: e.proof ?? null,
+      paper: raw.slice(c.start, c.fpEnd ?? c.end), kind: e.kind, note: e.note ?? null, proof: e.proof ?? null,
       lean: c.decls.map(({ name, d }) => ({ name, type: d.type_hash, closure: d.closure_hash, body: c.proofEnv ? d.body_hash : null })),
       env: envId,
     })).slice(0, 16);
@@ -499,6 +573,7 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
       `<label class="mark"><input type="checkbox" data-mark="${escapeHtml(c.id)}"> reviewed</label><span class="mark-state" data-mark-state="${escapeHtml(c.id)}"></span><span class="fp" title="fingerprint of the paper text and the Lean statement, context and toolchain">${fp}</span></header>` +
       (e.note ? `<p class="note entry-note">${escapeHtml(e.note)}</p>` : '') +
       `<div class="pair"><div class="paper-col">${left}</div><div class="lean-col">${right || '<p class="muted">No Lean counterpart.</p>'}</div></div>${proofHtml}</section>` });
+    for (const p of proofParts ?? []) htmlCards.push(p);
   }
 
   // ---------------------------------------------- paper order with text ----

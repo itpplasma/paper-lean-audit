@@ -26,6 +26,7 @@ export function checkStepAnchor(where, a, errors) {
   const hasPos = Array.isArray(a.at) && a.at.length === 2 && a.at.every(Number.isInteger);
   const hasQuote = typeof a.quote === 'string' && a.quote.length > 0;
   if (hasPos === hasQuote) errors.push(`${where}: step anchor needs exactly one of "at": [line, column] or "quote"`);
+  if (a.decl !== undefined && !(typeof a.decl === 'string' && a.decl.length)) errors.push(`${where}: "decl" must be a declaration name`);
 }
 
 export function validateMap(map) {
@@ -73,7 +74,19 @@ export function validateMap(map) {
 // Declaration of the Lean proof that a proof entry follows.
 export const proofDecl = (e) => e.proof?.lean ?? e.lean?.[0];
 
-export function mapDeclarations(map) {
+// Declarations whose proofs hold steps of a printed proof other than the one
+// the entry follows: step lemmas that the proof calls, named by "decl".
+export function stepDecls(e) {
+  const out = new Set();
+  for (const s of e.proof?.sentences ?? []) for (const a of s.steps ?? []) if (a.decl) out.add(a.decl);
+  for (const a of e.proof?.lean_adds ?? []) if (a.step?.decl) out.add(a.step.decl);
+  out.delete(proofDecl(e));
+  return [...out].sort();
+}
+
+// Declarations that count as mapped results; step lemmas do not, so results
+// used through them are still found as uses of the proof.
+export function mapMapped(map) {
   const names = new Set();
   for (const e of map.entries) for (const n of e.lean ?? []) names.add(n);
   for (const l of map.lean_only ?? []) if (l.decl) names.add(l.decl);
@@ -81,6 +94,14 @@ export function mapDeclarations(map) {
   return [...names].sort();
 }
 
+export function mapDeclarations(map) {
+  const names = new Set(mapMapped(map));
+  for (const e of map.entries) for (const n of stepDecls(e)) names.add(n);
+  return [...names].sort();
+}
+
 export function mapTraces(map) {
-  return [...new Set(map.entries.filter((e) => e.proof && proofDecl(e)).map(proofDecl))].sort();
+  const names = new Set();
+  for (const e of map.entries) if (e.proof && proofDecl(e)) { names.add(proofDecl(e)); for (const n of stepDecls(e)) names.add(n); }
+  return [...names].sort();
 }

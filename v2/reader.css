@@ -40,6 +40,9 @@ h3.sec { margin: 1.5rem 0 .5rem; font-size: 1.1rem; }
 .lean-col { padding: .6rem .9rem; min-width: 0; font-size: 14px; }
 .row { border-top: 1px dashed var(--line); }
 .row.lean-adds { background: color-mix(in srgb, var(--adds) 7%, transparent); }
+.card.proof-part > header { background: var(--bg); }
+.card.proof-part .proof-head, .card.proof-part .row:first-child { border-top: none; }
+.in-decl { font: 12px system-ui, sans-serif; color: var(--muted); margin: .1rem 0; }
 .proof-head { padding: .4rem .9rem; border-top: 1px solid var(--line); background: var(--panel); font: 13px system-ui, sans-serif; }
 .env-head { font-weight: bold; }
 .env-definition .env-head, .env-convention .env-head, .env-remark .env-head { font-style: normal; }

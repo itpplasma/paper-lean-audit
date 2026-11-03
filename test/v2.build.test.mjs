@@ -55,7 +55,7 @@ test('fixture builds without failed checks and shows every element of the view',
   assert.match(h, /prose<\/span> A remark on the argument/);
   assert.match(h, /through it: <a href="#c-lem:double">Lemma 1.2<\/a>/);
   const sum = r.report.cards.find((c) => c.id === 'lem:sum');
-  assert.deepEqual(sum.account, { sentences: 4, matched: 3, prose: 1, lean_adds: 1, large: 0, cited: ['lem:double'], used: ['lem:double'], only_paper: [], only_lean: [] });
+  assert.deepEqual(sum.account, { sentences: 4, matched: 3, prose: 1, lean_adds: 2, large: 0, cited: ['lem:double'], used: ['lem:double'], only_paper: [], only_lean: [] });
   assert.deepEqual(sum.flags.sort(), ['Lean adds', 'Lean-only definitions', 'prose', 'unused hypotheses']);
 });
 
@@ -127,7 +127,51 @@ test('cited and used results must agree unless the map records the difference', 
 
 test('a sentence covering more Lean steps than the threshold is a large step', (t) => {
   const r = run(copy(t, { map: (m) => { m.settings = { large_step: 1 }; } }));
-  assert.match(r.html, /large step: 2 Lean steps/);
+  assert.match(r.html, /large step: 3 Lean steps/);
+});
+
+test('a sentence may name steps of a step lemma that the proof calls', (t) => {
+  const r = run(copy(t, { map: (m) => { entry(m, 'lem:sum').proof.lean_adds.push({ step: { decl: 'AuditFixture.isEven_of_isDoubled', quote: 'obtain ⟨k, rfl⟩ := h' }, note: 'The helper unpacks n = 2k.' }); } }));
+  assert.deepEqual(r.report.errors, []);
+  // The state change of the callee is shown under its name, its unclaimed step as Lean adds.
+  assert.match(r.html, /<div class="in-decl">in <code title="AuditFixture.isEven_of_isDoubled">isEven_of_isDoubled<\/code><\/div><div class="goal closed">goal closed<\/div>/);
+  assert.match(r.html, /Lean adds<\/span> <span class="note">The helper unpacks n = 2k\.<\/span><\/div><div class="lean-col"><div class="in-decl">in <code title="AuditFixture.isEven_of_isDoubled">/);
+  assert.match(r.html, /Lean: <code>AuditFixture.even_add<\/code>, with steps in <code title="AuditFixture.isEven_of_isDoubled">/);
+  assert.deepEqual(r.report.anchors['lem:sum.proof.sentences[1]'].steps.map((x) => x.decl ?? null), [null, 'AuditFixture.isEven_of_isDoubled', null]);
+  // A step lemma is not a mapped result: the result it uses still counts as used by the proof.
+  assert.deepEqual(r.report.cards.find((c) => c.id === 'lem:sum').account.used, ['lem:double']);
+  const r2 = run(copy(t, { map: (m) => { entry(m, 'lem:sum').proof.sentences[0].steps.push({ decl: 'AuditFixture.IsDoubled', quote: 'IsDoubled' }); } }));
+  assert.ok(hasError(r2, /no proof-state trace for AuditFixture.IsDoubled/), r2.report.errors.join('\n'));
+});
+
+// The proof of the sum lemma stands apart from its statement (after a remark) and
+// states and proves Lemma 1.2 where it is used.
+const nested = (p) => p
+  .replace(/\\begin\{lemma\}\\label\{lem:double\}[^]*?\\end\{proof\}\n/, '')
+  .replace('\\begin{proof}\nWrite $m=2a$.', 'Lemma~\\ref{lem:sum} is used below.\n\\begin{proof}\nWrite $m=2a$.\n' +
+    '\\begin{lemma}\\label{lem:double}\nFor every $k$, the number $\\dbl(k)$ is even.\n\\end{lemma}\n' +
+    '\\begin{proof}\nBy definition, $\\dbl(k)=2k$ is of the required form.\n\\end{proof}\n');
+
+test('a proof apart from its statement, with a lemma stated and proved inside it', (t) => {
+  const r = run(copy(t, { paper: nested, map: (m) => { entry(m, 'lem:sum').proof.paper = { quote: 'Write $m=2a$.' }; } }));
+  assert.deepEqual(r.report.errors, []);
+  const sum = r.report.cards.find((c) => c.id === 'lem:sum');
+  assert.equal(sum.account.sentences, 4);
+  assert.deepEqual(sum.account.cited, ['lem:double']);
+  // Paper order: statement, the text between, proof part, nested lemma, proof part.
+  const at = (re) => r.html.search(re);
+  const order = [at(/id="c-lem:sum"/), at(/is used below/), at(/id="p-lem:sum-0"/), at(/id="c-lem:double"/), at(/id="p-lem:sum-1"/)];
+  assert.ok(order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])), JSON.stringify(order));
+  assert.match(r.html, /id="p-lem:sum-0"[^]*?<h3>Proof of Lemma 1\.2<\/h3>/);
+  assert.match(r.html, /id="p-lem:sum-1"[^]*?<h3>Proof of Lemma 1\.2 \(continued\)<\/h3>/);
+  assert.match(r.html, /id="p-lem:sum-1"[^]*?Account\./);
+  assert.doesNotMatch(r.html.slice(at(/id="p-lem:sum-0"/), at(/id="c-lem:double"/)), /Account\./);
+  // A sentence quote inside the nested lemma is not a sentence of the outer proof.
+  const r2 = run(copy(t, { paper: nested, map: (m) => {
+    entry(m, 'lem:sum').proof.paper = { quote: 'Write $m=2a$.' };
+    entry(m, 'lem:sum').proof.sentences.push({ quote: 'is of the required form', kind: 'prose', note: 'x' });
+  } }));
+  assert.ok(hasError(r2, /lies in an environment nested in the proof/), r2.report.errors.join('\n'));
 });
 
 test('sync against a previous report lists moved, new and broken anchors', (t) => {

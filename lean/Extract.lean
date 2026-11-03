@@ -458,9 +458,15 @@ partial def Ctx.collectSteps (c : Ctx) (fileMap : FileMap) (text : String) (t : 
     ("depth", Json.num s.depth),
     ("parent", match s.parent with | some p => Json.num p | none => Json.null)] ++ s.json)
 
+/-- Info trees of the traced commands and errors of all commands. The command
+elaborator resets both per command, so they are collected after each one. -/
+structure TraceAcc where
+  trees : IO.Ref (Array InfoTree)
+  errors : IO.Ref (Array Message)
+
 open Frontend in
 partial def traceLoop (inputCtx : Parser.InputContext) (tts : Array TraceTarget)
-  (lastStop : String.Pos.Raw) (skip : Bool) : FrontendM Unit := do
+  (lastStop : String.Pos.Raw) (skip : Bool) (acc : TraceAcc) : FrontendM Unit := do
   updateCmdPos
   let s ← get
   if lastStop ≤ s.parserState.pos then return
@@ -478,7 +484,10 @@ partial def traceLoop (inputCtx : Parser.InputContext) (tts : Array TraceTarget)
       | h :: rest => { h with opts := h.opts.setBool `debug.byAsSorry (skip && !traced) } :: rest
       | [] => [] } }
   elabCommandAtFrontend cmd
-  unless Parser.isTerminalCommand cmd do traceLoop inputCtx tts lastStop skip
+  let st ← get
+  if traced then acc.trees.modify (· ++ st.commandState.infoState.trees.toArray)
+  acc.errors.modify (· ++ (st.commandState.messages.toList.filter (·.severity == .error)).toArray)
+  unless Parser.isTerminalCommand cmd do traceLoop inputCtx tts lastStop skip acc
 
 open Frontend in
 /-- Re-elaborate `mod` from source with info trees and collect the tactic steps
@@ -504,14 +513,15 @@ def traceModule (cfg : Config) (mod : Name) (targets : Array (Name × Position �
   let (header, parserState, messages) ← Parser.parseHeader inputCtx
   let (env, messages) ← processHeader header opts messages inputCtx (mainModule := mod)
   let cmdState := { Command.mkState env messages opts with infoState := { enabled := true } }
-  let loop := traceLoop inputCtx tts lastStop cfg.skipEarlierProofs
+  let acc : TraceAcc := { trees := ← IO.mkRef #[], errors := ← IO.mkRef #[] }
+  let loop := traceLoop inputCtx tts lastStop cfg.skipEarlierProofs acc
   let ((), st) ← (loop { inputCtx }).run { commandState := cmdState, parserState, cmdPos := parserState.pos }
-  let errs := st.commandState.messages.toList.filter (·.severity == .error)
+  let errs ← acc.errors.get
   unless errs.isEmpty do
-    let m ← errs.head!.toString
+    let m ← errs[0]!.toString
     throw (IO.userError s!"re-elaborating {mod} failed: {m}")
   let c : Ctx := { cfg, env := st.commandState.env }
-  let trees := st.commandState.infoState.trees.toArray
+  let trees ← acc.trees.get
   let mut out := #[]
   for t in tts do
     out := out.push (t.name.toString, Json.mkObj [("steps", Json.arr (← c.collectSteps fileMap text t trees))])
