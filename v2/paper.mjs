@@ -240,7 +240,11 @@ export function sentences(text, from, to) {
     let a = start, b = end;
     while (a < b && /\s/.test(text[a])) a++;
     while (b > a && /\s/.test(text[b - 1])) b--;
-    if (b > a && /[^\s{}]/.test(text.slice(a, b))) out.push({ start: a, end: b });
+    const span = text.slice(a, b);
+    // A bare list opening belongs to the first item, a bare closing to the last.
+    if (/^\\begin\s*\{(?:itemize|enumerate)\}$/.test(span)) return;
+    if (/^\\end\s*\{(?:itemize|enumerate)\}$/.test(span) && out.length) { out.at(-1).end = b; start = end; return; }
+    if (b > a && /[^\s{}]/.test(span)) out.push({ start: a, end: b });
     start = end;
   };
   const nextNonSpace = (i) => { while (i < to && /\s/.test(text[i])) i++; return i; };
