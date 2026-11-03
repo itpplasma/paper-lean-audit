@@ -260,10 +260,10 @@ test('sentences: a display that ends with a period and a long label ends the sen
   assert.deepEqual(s, ['We show\n\\begin{equation} a=b.\n \\label{eq:a-rather-long-label}\\end{equation}', 'The inclusion holds.']);
 });
 
-test('sentences: list markup joins the first and the last item', () => {
+test('sentences: list markup belongs to neither the first nor the last item', () => {
   const text = 'Two facts:\n\\begin{itemize}\n\\item $a=b$.\n\\item $c=d$.\n\\end{itemize}\n\nHence the claim.';
   const s = sentences(text, 0, text.length).map((x) => text.slice(x.start, x.end));
-  assert.deepEqual(s, ['Two facts:', '\\begin{itemize}\n\\item $a=b$.', '\\item $c=d$.\n\\end{itemize}', 'Hence the claim.']);
+  assert.deepEqual(s, ['Two facts:', '\\item $a=b$.', '\\item $c=d$.', 'Hence the claim.']);
 });
 
 test('a proof row holding a list item renders without an unclosed list', (t) => {
@@ -273,6 +273,14 @@ test('a proof row holding a list item renders without an unclosed list', (t) => 
   }));
   assert.deepEqual(r.report.errors, []);
   assert.ok(!r.report.warnings.some((w) => /unclosed environment/.test(w)), r.report.warnings.join('; '));
+});
+
+test('sentences: list delimiters are not sentences of their own', () => {
+  const text = 'We check:\n\n\\begin{itemize}\n\\item $a$ holds.\n\\item $b$ holds.\n\\end{itemize}\nBy both, $c$.';
+  const s = sentences(text, 0, text.length).map((x) => text.slice(x.start, x.end));
+  assert.deepEqual(s, ['We check:', '\\item $a$ holds.', '\\item $b$ holds.', 'By both, $c$.']);
+  const text2 = '\\begin{itemize}\n\\item $a$ holds\n\\end{itemize}\n\n\\\\ Then $c$.';
+  assert.deepEqual(sentences(text2, 0, text2.length).map((x) => text2.slice(x.start, x.end)), ['\\item $a$ holds', 'Then $c$.']);
 });
 
 test('environment numbers follow shared counters and section resets', () => {

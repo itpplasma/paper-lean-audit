@@ -236,15 +236,14 @@ export function sentences(text, from, to) {
   let start = from;
   let braces = 0;
   let math = null; // '$', '$$', '\\(', '\\[', or an environment name
+  // List delimiters and forced line breaks at the start of a span belong to no sentence.
+  const lead = /^(?:\s+|\\(?:begin|end)\s*\{(?:itemize|enumerate|description)\}|\\\\)/;
+  const trail = /(?:\s+|\\(?:begin|end)\s*\{(?:itemize|enumerate|description)\}|\\\\)$/;
   const push = (end) => {
     let a = start, b = end;
-    while (a < b && /\s/.test(text[a])) a++;
-    while (b > a && /\s/.test(text[b - 1])) b--;
-    const span = text.slice(a, b);
-    // A bare list opening belongs to the first item, a bare closing to the last.
-    if (/^\\begin\s*\{(?:itemize|enumerate)\}$/.test(span)) return;
-    if (/^\\end\s*\{(?:itemize|enumerate)\}$/.test(span) && out.length) { out.at(-1).end = b; start = end; return; }
-    if (b > a && /[^\s{}]/.test(span)) out.push({ start: a, end: b });
+    for (let m; a < b && (m = lead.exec(text.slice(a, Math.min(b, a + 40)))); ) a += m[0].length;
+    for (let m; b > a && (m = trail.exec(text.slice(Math.max(a, b - 40), b))); ) b -= m[0].length;
+    if (b > a && /[^\s{}]/.test(text.slice(a, b))) out.push({ start: a, end: b });
     start = end;
   };
   const nextNonSpace = (i) => { while (i < to && /\s/.test(text[i])) i++; return i; };
