@@ -374,7 +374,7 @@ def sortObj (xs : Array (String × Json)) : Json :=
 def containerKinds : List Name :=
   [``Lean.Parser.Tactic.tacticSeq, ``Lean.Parser.Tactic.tacticSeq1Indented,
    ``Lean.Parser.Tactic.tacticSeqBracketed, ``Lean.Parser.Term.byTactic,
-   ``Lean.Parser.Tactic.paren, ``Lean.cdot, ``Lean.Parser.Tactic.case,
+   ``Lean.Parser.Tactic.paren, ``Lean.cdot, ``Lean.cdotTk, ``Lean.Parser.Tactic.case,
    ``Lean.Parser.Tactic.«tactic_<;>_», `by, identKind, nullKind]
 
 def hypName (n : Name) : String :=
