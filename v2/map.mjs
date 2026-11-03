@@ -50,6 +50,10 @@ export function validateMap(map) {
     if (e.proof) {
       if (e.kind === 'cites') errors.push(`${where}: a cited result has no printed proof to map`);
       if (e.proof.paper) checkQuote(`${where}.proof`, e.proof.paper, errors);
+      if (e.proof.end) {
+        if (!e.proof.paper) errors.push(`${where}.proof: "end" needs "paper", the start of the proof in the running text`);
+        checkQuote(`${where}.proof.end`, e.proof.end, errors);
+      }
       if (!Array.isArray(e.proof.sentences)) errors.push(`${where}.proof: sentences must be an array`);
       for (const [j, s] of (e.proof.sentences ?? []).entries()) {
         const sw = `${where}.proof.sentences[${j}]`;

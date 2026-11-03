@@ -262,6 +262,48 @@
      ]
     }
    }
+  },
+  "AuditFixture.isEven_of_isDoubled": {
+   "body_hash": "efc261d5bddf26d0",
+   "closure_hash": "8856fc31da249002",
+   "context": [
+    "AuditFixture.IsDoubled",
+    "AuditFixture.IsEven",
+    "AuditFixture.double"
+   ],
+   "deps": [
+    "AuditFixture.IsDoubled",
+    "AuditFixture.IsEven"
+   ],
+   "doc": "An unmapped helper that routes through `double_isEven`.",
+   "file": "AuditFixture/Main.lean",
+   "kind": "theorem",
+   "module": "AuditFixture.Main",
+   "range": {
+    "end": [
+     12,
+     23
+    ],
+    "start": [
+     9,
+     0
+    ]
+   },
+   "signature": "AuditFixture.isEven_of_isDoubled {n : Nat} (h : IsDoubled n) : IsEven n",
+   "source": "/-- An unmapped helper that routes through `double_isEven`. -/\ntheorem isEven_of_isDoubled {n : Nat} (h : IsDoubled n) : IsEven n := by\n  obtain ⟨k, rfl⟩ := h\n  exact double_isEven k",
+   "type_hash": "d5824d1d6df12200",
+   "unfolded": "∀ {n : Nat}, (∃ k, n = 2 * k) → ∃ k, n = 2 * k",
+   "unused": [],
+   "uses": {
+    "helpers": [],
+    "library": [
+     "Eq.symm"
+    ],
+    "mapped": [
+     "AuditFixture.double_isEven"
+    ],
+    "via": {}
+   }
   }
  },
  "environment": {
@@ -674,6 +716,89 @@
       ]
      },
      "text": "rw [Nat.mul_add]",
+     "uses_library": [],
+     "uses_project": []
+    }
+   ]
+  },
+  "AuditFixture.isEven_of_isDoubled": {
+   "steps": [
+    {
+     "depth": 0,
+     "goals_after": [
+      {
+       "hyps": [
+        {
+         "name": "k",
+         "type": "Nat"
+        }
+       ],
+       "tag": "",
+       "target": "IsEven 𝔡(k)"
+      }
+     ],
+     "goals_before": [
+      {
+       "hyps": [
+        {
+         "name": "n",
+         "type": "Nat"
+        },
+        {
+         "name": "h",
+         "type": "IsDoubled n"
+        }
+       ],
+       "tag": "",
+       "target": "IsEven n"
+      }
+     ],
+     "index": 0,
+     "kind": "Lean.Parser.Tactic.obtain",
+     "parent": null,
+     "range": {
+      "end": [
+       11,
+       22
+      ],
+      "start": [
+       11,
+       2
+      ]
+     },
+     "text": "obtain ⟨k, rfl⟩ := h",
+     "uses_library": [],
+     "uses_project": []
+    },
+    {
+     "depth": 0,
+     "goals_after": [],
+     "goals_before": [
+      {
+       "hyps": [
+        {
+         "name": "k",
+         "type": "Nat"
+        }
+       ],
+       "tag": "",
+       "target": "IsEven 𝔡(k)"
+      }
+     ],
+     "index": 1,
+     "kind": "Lean.Parser.Tactic.exact",
+     "parent": null,
+     "range": {
+      "end": [
+       12,
+       23
+      ],
+      "start": [
+       12,
+       2
+      ]
+     },
+     "text": "exact double_isEven k",
      "uses_library": [],
      "uses_project": []
     }

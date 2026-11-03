@@ -150,6 +150,26 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
   // ------------------------------------------------------- proofs ----
   const proofOwner = new Map();
   for (const c of cards) {
+    if (c.entry.proof?.end) {
+      // A printed proof in the running text, from the start quote to the end quote.
+      const a = resolveQuote(raw, c.entry.proof.paper, 0, raw.length, doc.text);
+      const b = a.error ? null : resolveQuote(raw, c.entry.proof.end, a.start, raw.length, doc.text);
+      if (a.error) { errors.push(`${c.id}: proof anchor ${a.error}`); continue; }
+      if (b.error) { errors.push(`${c.id}: proof end anchor ${b.error} after the start`); continue; }
+      const pf = { start: a.start, end: b.end, bodyStart: a.start, bodyEnd: b.end, text: true };
+      if (doc.envs.some((x) => x.start < pf.end && pf.start < x.end) || doc.proofs.some((x) => x.start < pf.end && pf.start < x.end)) {
+        errors.push(`${c.id}: the running-text proof overlaps an environment`); continue;
+      }
+      if (c.env) {
+        if (doc.text.slice(c.env.end, pf.start).trim()) { errors.push(`${c.id}: text between the statement and its running-text proof`); continue; }
+        c.end = Math.max(c.end, pf.end);
+      } else {
+        c.passage = { start: pf.start, end: pf.start };
+        c.start = pf.start; c.end = pf.end;
+      }
+      c.proofEnv = pf;
+      continue;
+    }
     if (!c.env) continue;
     let pf = null;
     if (c.entry.proof?.paper) {
@@ -346,6 +366,7 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
     // Paper side.
     let left;
     if (c.env) left = `<div class="env env-${escapeHtml(c.env.name)}">${envHead(c.env)} ${renderTex(c.env.bodyStart, c.env.bodyEnd)}</div>`;
+    else if (c.proofEnv?.text && c.passage.start === c.passage.end) left = '<p class="muted">The proof is printed as running text; its sentences follow below.</p>';
     else left = renderTex(c.passage.start, c.passage.end);
 
     // Proof rows.
@@ -359,7 +380,8 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
       const stepsByDecl = new Map();
       for (const n of [decl, ...helpers]) {
         const trace = ex.traces?.[n]?.steps;
-        if (!trace) errors.push(`${c.id}: no proof-state trace for ${n}`);
+        if (n !== decl && !ex.declarations[n]) errors.push(`${c.id}: Lean declaration ${n} not found in the extraction`);
+        else if (!trace) errors.push(`${c.id}: no proof-state trace for ${n}`);
         stepsByDecl.set(n, (trace ?? []).map((s) => ({ ...s, decl: n, key: `${n}#${s.index}`, parentKey: s.parent === null ? null : `${n}#${s.parent}` })));
       }
       const steps = [...stepsByDecl.values()].flat();
