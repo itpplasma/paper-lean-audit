@@ -71,6 +71,29 @@ test('a paper environment without a map entry fails', (t) => {
   assert.ok(hasError(r, /Lemma 1\.2 \(line \d+\) has no map entry/), r.report.errors.join('\n'));
 });
 
+test('scope "front" covers the text before the first section, such as an abstract', (t) => {
+  const r = run(copy(t, {
+    paper: (p) => p.replace('\\begin{document}\n', '\n\\begin{document}\n\\begin{abstract}\nEvery double is even.\n\\end{abstract}\n\n'),
+    map: (m) => {
+      m.scope = { sections: ['front'] };
+      m.entries.push({ id: 'abstract', paper: { quote: 'Every double is even.' }, kind: 'prose', note: 'Summary.' });
+    },
+  }));
+  assert.deepEqual(r.report.errors, []);
+  assert.deepEqual(r.report.cards.map((c) => c.id), ['abstract']);
+  assert.doesNotMatch(r.html, /begin\{document\}/);
+});
+
+test('settings.lean_ref_commands renders further Lean reference commands like \\leandecl', (t) => {
+  const r = run(copy(t, {
+    paper: (p) => p.replace('Throughout,', 'See \\leanother{Other/File.lean}{7}{Other.thing}. Throughout,'),
+    map: (m) => { m.settings = { lean_ref_commands: ['leanother'] }; },
+  }));
+  assert.deepEqual(r.report.errors, []);
+  assert.match(r.html, /See <code>Other\.thing<\/code>\./);
+  assert.doesNotMatch(r.html, /\\leanother/);
+});
+
 test('a quote that is not verbatim in the paper fails', (t) => {
   const r = run(copy(t, { map: (m) => { entry(m, 'lem:sum').proof.sentences[0].quote = 'Write $m = 2a$.'; } }));
   assert.ok(hasError(r, /paper quote not found/));
