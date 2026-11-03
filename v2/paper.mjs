@@ -231,6 +231,10 @@ const ABBREVIATIONS = new Set(['e.g', 'i.e', 'cf', 'resp', 'etc', 'vs', 'viz', '
 // the period is followed by `\ `; a period at the end of displayed
 // mathematics ends the sentence after the display. Blank lines and \item
 // also end sentences.
+// Line breaks, list markup and spacing commands carry no claim: a span of
+// only these is not a sentence.
+const layoutOnly = (s) => s.replace(/\\(?:begin|end)\s*\{[^{}]*\}|\\item\b|\\\\(?:\[[^\]]*\])?|\\(?:par|newline|noindent|medskip|smallskip|bigskip)\b/g, '');
+
 export function sentences(text, from, to) {
   const out = [];
   let start = from;
@@ -240,7 +244,7 @@ export function sentences(text, from, to) {
     let a = start, b = end;
     while (a < b && /\s/.test(text[a])) a++;
     while (b > a && /\s/.test(text[b - 1])) b--;
-    if (b > a && /[^\s{}]/.test(text.slice(a, b))) out.push({ start: a, end: b });
+    if (b > a && /[^\s{}]/.test(layoutOnly(text.slice(a, b)))) out.push({ start: a, end: b });
     start = end;
   };
   const nextNonSpace = (i) => { while (i < to && /\s/.test(text[i])) i++; return i; };

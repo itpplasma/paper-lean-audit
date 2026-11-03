@@ -214,6 +214,12 @@ test('sentences: abbreviations, displays and inline mathematics', () => {
   assert.deepEqual(s, ['Write $m=2a$.', 'By Lemma~1, $n$ is even, i.e.\\ $n=2b$.', 'Then\n\\begin{equation}\nx=y.\n\\end{equation}', 'This is it.', 'See Prop. 3 for more.']);
 });
 
+test('sentences: a forced line break or list markup alone is not a sentence', () => {
+  const text = 'One claim. \\\\\n\nTwo claims.\n\\begin{itemize}\n\\item Three.\n\\end{itemize}\nFour.';
+  const s = sentences(text, 0, text.length).map((x) => text.slice(x.start, x.end));
+  assert.deepEqual(s, ['One claim.', 'Two claims.', '\\item Three.', '\\end{itemize}\nFour.']);
+});
+
 test('environment numbers follow shared counters and section resets', () => {
   const doc = parsePaper(fs.readFileSync(path.join(fixture, 'paper.tex'), 'utf8'));
   assert.deepEqual(doc.envs.map((e) => `${e.title} ${e.number}`), ['Definition 1.1', 'Lemma 1.2', 'Lemma 1.3']);
