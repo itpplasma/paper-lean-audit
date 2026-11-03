@@ -221,6 +221,12 @@ test('sentences: a display that ends with a period and a long label ends the sen
   assert.deepEqual(s, ['We show\n\\begin{equation} a=b.\n \\label{eq:a-rather-long-label}\\end{equation}', 'The inclusion holds.']);
 });
 
+test('sentences: list markup joins the first and the last item', () => {
+  const text = 'Two facts:\n\\begin{itemize}\n\\item $a=b$.\n\\item $c=d$.\n\\end{itemize}\n\nHence the claim.';
+  const s = sentences(text, 0, text.length).map((x) => text.slice(x.start, x.end));
+  assert.deepEqual(s, ['Two facts:', '\\begin{itemize}\n\\item $a=b$.', '\\item $c=d$.\n\\end{itemize}', 'Hence the claim.']);
+});
+
 test('environment numbers follow shared counters and section resets', () => {
   const doc = parsePaper(fs.readFileSync(path.join(fixture, 'paper.tex'), 'utf8'));
   assert.deepEqual(doc.envs.map((e) => `${e.title} ${e.number}`), ['Definition 1.1', 'Lemma 1.2', 'Lemma 1.3']);

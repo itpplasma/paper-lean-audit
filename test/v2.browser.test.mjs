@@ -62,3 +62,21 @@ test('v2 reader: marks, invalidation, graph colours, export/import and previews'
   assert.match(await page.textContent('#preview'), /natural number is even/);
   assert.deepEqual(errors, []);
 });
+
+test('v2 reader: a long source path does not widen the page on a phone', { skip: !executablePath && 'Chromium not found' }, async (t) => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const fixture = path.join(here, 'fixtures/v2');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pla-v2-narrow-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  for (const f of ['map.json', 'paper.tex']) fs.copyFileSync(path.join(fixture, f), path.join(dir, f));
+  const ex = JSON.parse(readFileSync(path.join(fixture, 'extraction.json'), 'utf8'));
+  for (const d of [...Object.values(ex.declarations), ...Object.values(ex.context)]) d.file = 'AuditFixture/AVeryLongDirectoryName/AnotherQuiteLongModuleNameWithoutBreaks.lean';
+  fs.writeFileSync(path.join(dir, 'extraction.json'), JSON.stringify(ex));
+  const { html } = build({ mapPath: path.join(dir, 'map.json'), graph: false });
+  const browser = await chromium.launch({ executablePath });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 390, height: 800 } });
+  await page.setContent(html);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+});

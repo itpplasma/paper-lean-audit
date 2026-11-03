@@ -87,7 +87,7 @@ g.card-node.focus path, g.card-node.focus polygon { stroke: #d53f8c; stroke-widt
   .pair, .row { grid-template-columns: minmax(0, 1fr); }
   .paper-col { border-right: none; border-bottom: 1px dashed var(--line); }
 }
-.fqn, .uses code, .again code { overflow-wrap: anywhere; }
+.fqn, .uses code, .again code, .def-head .loc { overflow-wrap: anywhere; }
 .paper-text, .paper-col, .lean-col { overflow-wrap: break-word; }
 .paper-text code, .paper-col code { overflow-wrap: anywhere; }
 .in-decl { color: var(--muted); font: 12px system-ui, sans-serif; }
