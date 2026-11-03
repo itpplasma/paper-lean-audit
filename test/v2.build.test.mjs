@@ -127,7 +127,56 @@ test('cited and used results must agree unless the map records the difference', 
 
 test('a sentence covering more Lean steps than the threshold is a large step', (t) => {
   const r = run(copy(t, { map: (m) => { m.settings = { large_step: 1 }; } }));
-  assert.match(r.html, /large step: 2 Lean steps/);
+  // Two steps of even_add and the two steps of the helper isEven_of_isDoubled.
+  assert.match(r.html, /large step: 4 Lean steps/);
+});
+
+test('a sentence can name a helper declaration as a whole or a step inside it', (t) => {
+  const r = run(copy(t));
+  assert.deepEqual(r.report.errors, []);
+  // The whole helper: its statement and the mapped result it uses.
+  assert.match(r.html, /class="helper" id="d-AuditFixture.isEven_of_isDoubled"><div class="def-head in-decl"><code class="fqn">AuditFixture.isEven_of_isDoubled<\/code>[^]*?IsDoubled<\/a> n\)[^]*?IsEven<\/a> n[^]*?uses <a href="#c-lem:double">Lemma 1.2<\/a>/);
+  assert.deepEqual(r.report.anchors['lem:sum.proof.sentences[1]'].steps.map((x) => x.decl ?? null), [null, null, 'AuditFixture.isEven_of_isDoubled']);
+  // Helper steps are not Lean-added steps of the proof, and uses stay transitive.
+  const sum = r.report.cards.find((c) => c.id === 'lem:sum');
+  assert.equal(sum.account.lean_adds, 1);
+  assert.deepEqual(sum.account.used, ['lem:double']);
+  const r2 = run(copy(t, { map: (m) => { entry(m, 'lem:sum').proof.sentences[1].steps[2] = { decl: 'AuditFixture.isEven_of_isDoubled', quote: 'exact double_isEven k' }; } }));
+  assert.deepEqual(r2.report.errors, []);
+  assert.match(r2.html, /step of <code class="fqn">AuditFixture.isEven_of_isDoubled<\/code>[^]*?goal closed/);
+  const r3 = run(copy(t, { map: (m) => { entry(m, 'lem:sum').proof.sentences[1].steps[2] = { decl: 'AuditFixture.isEven_of_isDoubled', quote: 'simp' }; } }));
+  assert.ok(hasError(r3, /Lean quote not found in AuditFixture.isEven_of_isDoubled/));
+  const r4 = run(copy(t, { map: (m) => { entry(m, 'lem:sum').proof.sentences[1].steps[2] = { decl: 'AuditFixture.missing' }; } }));
+  assert.ok(hasError(r4, /AuditFixture.missing not found in the extraction/));
+});
+
+test('a printed proof in the running text is mapped sentence by sentence', (t) => {
+  const paper = (p) => p.replace('\\begin{proof}\nBy definition, $\\dbl(k)=2k$ is of the required form.\n\\end{proof}',
+    'We now prove Lemma~\\ref{lem:double}. By definition, $\\dbl(k)=2k$ is of the required form. This ends the argument.');
+  const runningText = (m) => {
+    const e = entry(m, 'lem:double');
+    e.proof.paper = { quote: 'By definition' };
+    e.proof.end = { quote: 'This ends the argument.' };
+    e.proof.sentences.push({ quote: 'This ends the argument.', kind: 'prose', note: 'End of the argument.' });
+  };
+  const r = run(copy(t, { paper }));
+  assert.ok(hasError(r, /lem:double: map has a proof, but no printed proof follows/));
+  // A separate passage card for the proof.
+  const passage = (m) => {
+    runningText(m);
+    const e = entry(m, 'lem:double');
+    m.entries.push({ id: 'proof:double', title: 'Proof of Lemma 1.2', paper: { quote: 'By definition' }, kind: 'formalizes', lean: e.lean, proof: e.proof });
+    delete e.proof;
+  };
+  const r2 = run(copy(t, { paper, map: passage }));
+  assert.ok(!hasError(r2, /proof:double/), r2.report.errors.join('\n'));
+  const card = r2.report.cards.find((c) => c.id === 'proof:double');
+  assert.deepEqual(card.account && [card.account.sentences, card.account.matched, card.account.prose], [2, 1, 1]);
+  assert.match(r2.html, /id="c-proof:double"[^]*?printed as running text[^]*?By definition/);
+  // The running text before the proof stays paper text, outside the card.
+  assert.match(r2.html, /We now prove Lemma[^]*?id="c-proof:double"/);
+  const r3 = run(copy(t, { paper, map: (m) => { passage(m); entry(m, 'proof:double').proof.end = { quote: 'nowhere' }; } }));
+  assert.ok(hasError(r3, /proof:double: proof end anchor quote not found/));
 });
 
 test('sync against a previous report lists moved, new and broken anchors', (t) => {

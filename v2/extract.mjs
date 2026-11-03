@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadMap, mapDeclarations, mapTraces } from './map.mjs';
+import { loadMap, mapDeclarations, mapResults, mapTraces } from './map.mjs';
 import { stableStringify } from './util.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -43,7 +43,7 @@ export async function extract({ mapPath, project, out, wrap = null, jobs = 2, lo
       follow_instances: lean.follow_instances ?? false,
     };
     const declarations = mapDeclarations(map);
-    const cfg = { ...base, declarations, mapped: declarations, trace: mapTraces(map) };
+    const cfg = { ...base, declarations, mapped: mapResults(map), trace: mapTraces(map) };
     fs.writeFileSync(path.join(tmp, 'extract.json'), JSON.stringify(cfg));
     let t0 = Date.now();
     await runLean(project, wrap, ['extract', path.join(tmp, 'extract.json'), path.join(tmp, 'extract.out.json')]);

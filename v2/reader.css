@@ -90,3 +90,4 @@ g.card-node.focus path, g.card-node.focus polygon { stroke: #d53f8c; stroke-widt
 .fqn, .uses code, .again code { overflow-wrap: anywhere; }
 .paper-text, .paper-col, .lean-col { overflow-wrap: break-word; }
 .paper-text code, .paper-col code { overflow-wrap: anywhere; }
+.helper { border-left: 2px solid var(--muted); padding-left: .5rem; margin-top: .4rem; }

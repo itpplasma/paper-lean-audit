@@ -40,4 +40,6 @@ test('extractor output equals the committed fixture extraction', { skip, timeout
   assert.deepEqual(steps.map((s) => s.text.split(' ')[0]), ['obtain', 'have', 'obtain', 'refine', 'rw']);
   assert.ok(steps[1].goals_after[0].hyps.some((h) => h.name === 'hb' && h.type === 'IsEven n'));
   assert.deepEqual(steps[1].uses_project, ['AuditFixture.isEven_of_isDoubled']);
+  // Two traced declarations in one module: both keep their steps.
+  assert.deepEqual(got.traces['AuditFixture.isEven_of_isDoubled'].steps.map((s) => s.text.split(' ')[0]), ['obtain', 'exact']);
 });

@@ -20,7 +20,7 @@
    "proof": {"sentences": [
     {"quote": "Write $m=2a$.", "kind": "formalizes", "steps": [{"quote": "obtain ⟨a, rfl⟩ := hm"}]},
     {"quote": "By Lemma~\\ref{lem:double}", "kind": "formalizes",
-     "steps": [{"quote": "have hb : IsEven n"}, {"quote": "obtain ⟨b, rfl⟩ := hb"}]},
+     "steps": [{"quote": "have hb : IsEven n"}, {"quote": "obtain ⟨b, rfl⟩ := hb"}, {"decl": "AuditFixture.isEven_of_isDoubled"}]},
     {"quote": "m+n=2a+2b=2(a+b)", "kind": "formalizes", "steps": [{"quote": "rw [Nat.mul_add]"}]},
     {"quote": "This is the familiar argument.", "kind": "prose", "note": "A remark on the argument; nothing to check."}],
     "lean_adds": [{"step": {"quote": "refine ⟨a + b, ?_⟩"}, "note": "Lean names the witness a + b before the computation."}]}}

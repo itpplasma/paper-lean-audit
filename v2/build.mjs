@@ -148,6 +148,26 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
   // ------------------------------------------------------- proofs ----
   const proofOwner = new Map();
   for (const c of cards) {
+    if (c.entry.proof?.end) {
+      // A printed proof in the running text, from the start quote to the end quote.
+      const a = resolveQuote(raw, c.entry.proof.paper, 0, raw.length, doc.text);
+      const b = a.error ? null : resolveQuote(raw, c.entry.proof.end, a.start, raw.length, doc.text);
+      if (a.error) { errors.push(`${c.id}: proof anchor ${a.error}`); continue; }
+      if (b.error) { errors.push(`${c.id}: proof end anchor ${b.error} after the start`); continue; }
+      const pf = { start: a.start, end: b.end, bodyStart: a.start, bodyEnd: b.end, text: true };
+      if (doc.envs.some((x) => x.start < pf.end && pf.start < x.end) || doc.proofs.some((x) => x.start < pf.end && pf.start < x.end)) {
+        errors.push(`${c.id}: the running-text proof overlaps an environment`); continue;
+      }
+      if (c.env) {
+        if (doc.text.slice(c.env.end, pf.start).trim()) { errors.push(`${c.id}: text between the statement and its running-text proof`); continue; }
+        c.end = Math.max(c.end, pf.end);
+      } else {
+        c.passage = { start: pf.start, end: pf.start };
+        c.start = pf.start; c.end = pf.end;
+      }
+      c.proofEnv = pf;
+      continue;
+    }
     if (!c.env) continue;
     let pf = null;
     if (c.entry.proof?.paper) {
@@ -344,6 +364,7 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
     // Paper side.
     let left;
     if (c.env) left = `<div class="env env-${escapeHtml(c.env.name)}">${envHead(c.env)} ${renderTex(c.env.bodyStart, c.env.bodyEnd)}</div>`;
+    else if (c.proofEnv?.text && c.passage.start === c.passage.end) left = '<p class="muted">The proof is printed as running text; its sentences follow below.</p>';
     else left = renderTex(c.passage.start, c.passage.end);
 
     // Proof rows.
@@ -359,6 +380,7 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
       for (const s of steps) if (s.parent !== null) { if (!children.has(s.parent)) children.set(s.parent, []); children.get(s.parent).push(s.index); }
       const descendants = (i) => { const out = []; const st = [...(children.get(i) ?? [])]; while (st.length) { const j = st.pop(); out.push(j); st.push(...(children.get(j) ?? [])); } return out; };
       const resolveStep = (a, where) => {
+        if (a.decl && a.decl !== decl) return resolveOther(a, where);
         if (!dsrc?.source) { errors.push(`${where}: no source for ${decl}`); return null; }
         let pos, endPos = null;
         if (a.at) pos = a.at;
@@ -380,6 +402,32 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
         if (!s) { errors.push(`${where}: no tactic step of ${decl} at ${JSON.stringify(a.at ?? a.quote)}`); return null; }
         return s;
       };
+      // A step of another (helper) declaration, or that declaration as a whole.
+      const resolveOther = (a, where) => {
+        const od = ex.declarations[a.decl];
+        if (!od) { errors.push(`${where}: Lean declaration ${a.decl} not found in the extraction`); return null; }
+        const otrace = ex.traces?.[a.decl]?.steps ?? [];
+        const ochildren = new Map();
+        for (const s of otrace) if (s.parent !== null) { if (!ochildren.has(s.parent)) ochildren.set(s.parent, []); ochildren.get(s.parent).push(s.index); }
+        const odesc = (i) => { const out = []; const st = [...(ochildren.get(i) ?? [])]; while (st.length) { const j = st.pop(); out.push(j); st.push(...(ochildren.get(j) ?? [])); } return out; };
+        if (!a.at && !a.quote) return { other: a.decl, whole: true, d: od, size: Math.max(1, otrace.length), index: null };
+        let pos, endPos = null;
+        if (a.at) pos = a.at;
+        else {
+          const hits = [];
+          for (let i = (od.source ?? '').indexOf(a.quote); i >= 0; i = od.source.indexOf(a.quote, i + 1)) hits.push(i);
+          if (!hits.length) { errors.push(`${where}: Lean quote not found in ${a.decl}: ${JSON.stringify(a.quote)}`); return null; }
+          if (a.occurrence === undefined && hits.length > 1) { errors.push(`${where}: Lean quote occurs ${hits.length} times in ${a.decl}; give "occurrence"`); return null; }
+          const k = hits[(a.occurrence ?? 1) - 1];
+          if (k === undefined) { errors.push(`${where}: Lean quote occurrence ${a.occurrence} not found`); return null; }
+          pos = sourcePos(od.source, od.range.start, k);
+          endPos = sourcePos(od.source, od.range.start, k + a.quote.length);
+        }
+        let s = otrace.find((x) => cmpPos(x.range.start, pos) === 0);
+        if (!s && endPos) s = otrace.filter((x) => cmpPos(x.range.start, pos) <= 0 && cmpPos(endPos, x.range.end) <= 0).sort((x, y) => y.depth - x.depth)[0];
+        if (!s) { errors.push(`${where}: no tactic step of ${a.decl} at ${JSON.stringify(a.at ?? a.quote)}`); return null; }
+        return { ...s, other: a.decl, whole: false, size: 1 + odesc(s.index).length, index: null, otherIndex: s.index };
+      };
       const sents = sentences(doc.text, pf.bodyStart, pf.bodyEnd);
       const mapped = [];
       for (const [j, s] of (e.proof.sentences ?? []).entries()) {
@@ -388,19 +436,22 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
         if (r.error) { errors.push(`${where}: paper ${r.error}: ${JSON.stringify(s.quote)}`); continue; }
         const resolved = (s.steps ?? []).map((a, k) => resolveStep(a, `${where}.steps[${k}]`)).filter(Boolean);
         mapped.push({ s, r, steps: resolved, sentence: sents.find((x) => x.start <= r.start && r.start < x.end) ?? null });
-        report.anchors[where] = { paper: { start: r.start, line: lineAt(raw, r.start) }, steps: resolved.map((x) => ({ index: x.index, start: x.range.start })) };
+        report.anchors[where] = { paper: { start: r.start, line: lineAt(raw, r.start) }, steps: resolved.map((x) => x.other
+          ? { decl: x.other, ...(x.whole ? { range: x.d.range ?? null, type: x.d.type_hash ?? null } : { index: x.otherIndex, start: x.range.start }) }
+          : { index: x.index, start: x.range.start }) };
       }
       for (const sn of sents) {
         if (!mapped.some((m) => m.sentence === sn)) errors.push(`${c.id}: proof sentence at line ${lineAt(raw, sn.start)} has no map entry: ${JSON.stringify(raw.slice(sn.start, Math.min(sn.end, sn.start + 90)))}`);
       }
       const claimed = new Set();
-      for (const m of mapped) for (const s of m.steps) { claimed.add(s.index); for (const d of descendants(s.index)) claimed.add(d); }
+      for (const m of mapped) for (const s of m.steps) if (!s.other) { claimed.add(s.index); for (const d of descendants(s.index)) claimed.add(d); }
       const hasClaimedDesc = (i) => descendants(i).some((d) => claimed.has(d));
       const adds = steps.filter((s) => !claimed.has(s.index) && !hasClaimedDesc(s.index) && (s.parent === null || hasClaimedDesc(s.parent)));
       const addNotes = new Map();
       for (const [j, la] of (e.proof.lean_adds ?? []).entries()) {
         const s = resolveStep(la.step, `${c.id}.proof.lean_adds[${j}]`);
         if (!s) continue;
+        if (s.other) { errors.push(`${c.id}.proof.lean_adds[${j}]: a Lean-added step must be a step of ${decl}`); continue; }
         if (!adds.includes(s)) errors.push(`${c.id}.proof.lean_adds[${j}]: step ${s.index} is not a Lean-added step`);
         addNotes.set(s.index, la.note);
       }
@@ -414,7 +465,8 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
       const rowId = () => `r-${slug(c.id)}-${proofRows.length}`;
       // A step's mapped results, directly or through unmapped helper lemmas.
       const via = ex.declarations[decl]?.uses?.via ?? {};
-      const stepMapped = (ss) => [...new Set(ss.flatMap((x) => x.uses_project.flatMap((n) => entryByDecl.has(n) ? [n] : (via[n] ?? []))))];
+      const stepMapped = (ss) => [...new Set(ss.flatMap((x) => x.whole ? (x.d.uses?.mapped ?? [])
+        : x.uses_project.flatMap((n) => entryByDecl.has(n) ? [n] : ((x.other ? ex.declarations[x.other]?.uses?.via : via)?.[n] ?? []))))];
       const usesCards = (ss) => [...new Set(stepMapped(ss).map((n) => entryByDecl.get(n)?.id).filter((x) => x && x !== c.id))].sort();
       const addRow = (s) => {
         const note = addNotes.get(s.index);
@@ -423,26 +475,44 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
         return `<div class="row lean-adds" id="${id}"><div class="paper-col"><span class="badge lean-adds">Lean adds</span>${note ? ` <span class="note">${escapeHtml(note)}</span>` : ''}</div>` +
           `<div class="lean-col">${renderGoalChange(s.goals_before, s.goals_after)}${usesHtml([s], via)}${tacticHtml([s])}</div></div>`;
       };
+      // A helper declaration as a whole: its statement, uses and source; a step
+      // inside it: its state change.
+      const otherHtml = (s) => {
+        const od = ex.declarations[s.other];
+        const head = `<div class="def-head in-decl">${s.whole ? '' : 'step of '}<code class="fqn">${escapeHtml(s.other)}</code> <span class="kind">${escapeHtml(od.kind)}</span>` +
+          `<span class="loc">${escapeHtml(od.file ?? '')}${od.range ? ':' + od.range.start[0] : ''}</span></div>`;
+        if (s.whole) {
+          const lib = [...(od.uses?.library ?? [])].sort();
+          const fake = [{ uses_project: [...new Set([...(od.uses?.mapped ?? []), ...(od.uses?.helpers ?? [])])], uses_library: lib }];
+          const id = shown.has(s.other) ? '' : ` id="${declAnchor(s.other)}"`;
+          shown.set(s.other, c.id);
+          return `<div class="helper"${id}>${head}${leanHtml(od.kind === 'theorem' ? od.signature : (od.source ?? od.signature))}${usesHtml(fake, od.uses?.via ?? {})}` +
+            (od.kind === 'theorem' && od.source ? `<details class="tactic"><summary>Lean source</summary>${leanHtml(od.source)}</details>` : '') + '</div>';
+        }
+        return `<div class="helper">${head}${renderGoalChange(s.goals_before, s.goals_after)}${usesHtml([s], od.uses?.via ?? {})}${tacticHtml([s])}</div>`;
+      };
       let rows = '';
       const placed = new Set();
       let large = 0, prose = 0, matched = 0;
       for (const [gi, g] of groupsBySentence.entries()) {
-        const upto = Math.min(...g.items.flatMap((m) => m.steps.map((s) => s.index)), Infinity);
+        const upto = Math.min(...g.items.flatMap((m) => m.steps.filter((s) => !s.other).map((s) => s.index)), Infinity);
         for (const s of adds) if (!placed.has(s.index) && s.index < upto) { rows += addRow(s); placed.add(s.index); }
         const span = g.sentence ?? { start: g.items[0].r.start, end: g.items[0].r.end };
         let leanCol = '';
         for (const m of g.items) {
           if (m.s.kind === 'prose') { prose++; leanCol += `<div class="prose"><span class="badge prose">prose</span> ${escapeHtml(m.s.note)}</div>`; continue; }
           matched++;
-          const top = [...m.steps].sort((a, b) => a.index - b.index);
-          const count = new Set(top.flatMap((s) => [s.index, ...descendants(s.index)])).size;
+          const top = m.steps.filter((s) => !s.other).sort((a, b) => a.index - b.index);
+          const others = m.steps.filter((s) => s.other);
+          const count = new Set(top.flatMap((s) => [s.index, ...descendants(s.index)])).size + others.reduce((n, s) => n + s.size, 0);
           const isLarge = count > settings.large_step;
           if (isLarge) large++;
           const first = top[0], last = top.at(-1);
           leanCol += `<div class="state ${escapeHtml(m.s.kind)}">` + (m.s.kind !== 'formalizes' ? `<span class="badge ${escapeHtml(m.s.kind)}">${escapeHtml(m.s.kind)}</span> ` : '') +
             (isLarge ? `<span class="badge large">large step: ${count} Lean steps</span>` : '') +
             (m.s.note ? `<p class="note">${escapeHtml(m.s.note)}</p>` : '') +
-            (first ? renderGoalChange(first.goals_before, last.goals_after) + usesHtml(top, via) + tacticHtml(top) : '') + '</div>';
+            (first ? renderGoalChange(first.goals_before, last.goals_after) + usesHtml(top, via) + tacticHtml(top) : '') +
+            others.map(otherHtml).join('') + '</div>';
         }
         const id = rowId();
         const refsHere = [...new Set(refsIn(doc.text, span.start, span.end).map((r) => labelEntry.get(r.label)?.id).filter(Boolean))].sort();
