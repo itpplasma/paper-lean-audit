@@ -136,6 +136,9 @@ test('a sentence can name a helper declaration as a whole or a step inside it', 
   assert.deepEqual(r.report.errors, []);
   // The whole helper: its statement and the mapped result it uses.
   assert.match(r.html, /class="helper" id="d-AuditFixture.isEven_of_isDoubled"><div class="def-head in-decl"><code class="fqn">AuditFixture.isEven_of_isDoubled<\/code>[^]*?IsDoubled<\/a> n\)[^]*?IsEven<\/a> n[^]*?uses <a href="#c-lem:double">Lemma 1.2<\/a>/);
+  // Helpers of the helper are folded into a count, not listed in the uses line.
+  const r1 = run(copy(t, { ex: (ex) => { ex.declarations['AuditFixture.isEven_of_isDoubled'].uses.helpers = ['AuditFixture.h1', 'AuditFixture.h2']; } }));
+  assert.match(r1.html, /class="helper"[^]*?<div class="uses">uses <a href="#c-lem:double">Lemma 1.2<\/a>[^]*?2 project lemmas without a card/);
   assert.deepEqual(r.report.anchors['lem:sum.proof.sentences[1]'].steps.map((x) => x.decl ?? null), [null, null, 'AuditFixture.isEven_of_isDoubled']);
   // Helper steps are not Lean-added steps of the proof, and uses stay transitive.
   const sum = r.report.cards.find((c) => c.id === 'lem:sum');

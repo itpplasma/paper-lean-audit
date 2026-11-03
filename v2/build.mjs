@@ -483,10 +483,13 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
           `<span class="loc">${escapeHtml(od.file ?? '')}${od.range ? ':' + od.range.start[0] : ''}</span></div>`;
         if (s.whole) {
           const lib = [...(od.uses?.library ?? [])].sort();
-          const fake = [{ uses_project: [...new Set([...(od.uses?.mapped ?? []), ...(od.uses?.helpers ?? [])])], uses_library: lib }];
+          // Mapped results in the line; the (transitive) unmapped helpers folded away.
+          const helpers = [...(od.uses?.helpers ?? [])].sort();
+          const fake = [{ uses_project: [...(od.uses?.mapped ?? [])], uses_library: lib }];
           const id = shown.has(s.other) ? '' : ` id="${declAnchor(s.other)}"`;
           shown.set(s.other, c.id);
-          return `<div class="helper"${id}>${head}${leanHtml(od.kind === 'theorem' ? od.signature : (od.source ?? od.signature))}${usesHtml(fake, od.uses?.via ?? {})}` +
+          return `<div class="helper"${id}>${head}${leanHtml(od.kind === 'theorem' ? od.signature : (od.source ?? od.signature))}${usesHtml(fake, {})}` +
+            (helpers.length ? `<details class="uses-lib"><summary>${helpers.length} project lemma${helpers.length > 1 ? 's' : ''} without a card</summary>${helpers.map((n) => `<code>${escapeHtml(n)}</code>`).join(' ')}</details>` : '') +
             (od.kind === 'theorem' && od.source ? `<details class="tactic"><summary>Lean source</summary>${leanHtml(od.source)}</details>` : '') + '</div>';
         }
         return `<div class="helper">${head}${renderGoalChange(s.goals_before, s.goals_after)}${usesHtml([s], od.uses?.via ?? {})}${tacticHtml([s])}</div>`;
