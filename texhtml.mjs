@@ -254,6 +254,8 @@ export class TexRenderer {
           continue;
         }
         if (s[i + 1] === '\\') { out += '<br>'; i += 2; continue; }
+        // A control space may be a backslash before a line break.
+        if (s[i + 1] === '\n' || s[i + 1] === '\t') { out += ' '; i += 2; continue; }
         if ('%&_#{}$ ,;'.includes(s[i + 1])) { out += s[i + 1] === ',' || s[i + 1] === ';' ? '&thinsp;' : escapeHtml(s[i + 1]); i += 2; continue; }
         const m = /^\\([A-Za-z]+\*?)/.exec(s.slice(i));
         if (!m) { out += '\\'; i++; continue; }
