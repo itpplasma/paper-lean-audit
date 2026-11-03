@@ -261,6 +261,15 @@ test('sentences: list markup joins the first and the last item', () => {
   assert.deepEqual(s, ['Two facts:', '\\begin{itemize}\n\\item $a=b$.', '\\item $c=d$.\n\\end{itemize}', 'Hence the claim.']);
 });
 
+test('a proof row holding a list item renders without an unclosed list', (t) => {
+  const r = run(copy(t, {
+    paper: (p) => p.replace('This is the familiar argument.', 'Two remarks:\n\\begin{itemize}\n\\item This is the familiar argument.\n\\item It is short.\n\\end{itemize}'),
+    map: (m) => { entry(m, 'lem:sum').proof.sentences.push({ quote: 'It is short.', kind: 'prose', note: 'A remark.' }, { quote: 'Two remarks:', kind: 'prose', note: 'A remark.' }); },
+  }));
+  assert.deepEqual(r.report.errors, []);
+  assert.ok(!r.report.warnings.some((w) => /unclosed environment/.test(w)), r.report.warnings.join('; '));
+});
+
 test('environment numbers follow shared counters and section resets', () => {
   const doc = parsePaper(fs.readFileSync(path.join(fixture, 'paper.tex'), 'utf8'));
   assert.deepEqual(doc.envs.map((e) => `${e.title} ${e.number}`), ['Definition 1.1', 'Lemma 1.2', 'Lemma 1.3']);

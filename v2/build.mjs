@@ -195,6 +195,14 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
   for (const m of doc.text.matchAll(/\\DeclareMathOperator\s*\{(\\[A-Za-z]+)\}\s*\{([^}]*)\}/g)) macros[m[1]] = `\\operatorname{${m[2]}}`;
   const tex = new TexRenderer({ macros, refs, cites: bibCites(bib), eqAuto, leanCommands: settings.lean_ref_commands ?? [] });
   const renderTex = (a, b) => tex.block(doc.text.slice(a, b), a);
+  // A proof row holding the first or last item of a list shows the item
+  // without the list's opening or closing, which belong to the whole list.
+  const listTrimmed = (a, b) => {
+    const t = doc.text.slice(a, b);
+    const open = /^\s*\\begin\s*\{(?:itemize|enumerate)\}/.exec(t);
+    const close = /\\end\s*\{(?:itemize|enumerate)\}\s*$/.exec(t);
+    return [a + (open ? open[0].length : 0), close ? a + close.index : b];
+  };
   const envHead = (env) => `<span class="env-head">${escapeHtml(env.title)}${env.number ? ' ' + escapeHtml(env.number) : ''}${env.optArg ? ' (' + tex.text(env.optArg, env.optStart) + ')' : ''}.</span>`;
   const cardTitle = (c) => c.env ? `${c.env.title}${c.env.number ? ' ' + c.env.number : ''}` : (c.entry.title ?? `Paragraph${c.entry.short ? ': ' + c.entry.short : ''}`);
 
@@ -478,7 +486,7 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
         const kinds = g.items.map((m) => m.s.kind);
         proofRows.push({ kind: kinds.every((k) => k === 'prose') ? 'prose' : 'formalizes', label: texToPlain(raw.slice(span.start, span.end), refs).slice(0, 90),
           refs: refsHere, uses: usesCards(g.items.flatMap((m) => m.steps)), anchor: id });
-        rows += `<div class="row" id="${id}"><div class="paper-col">${renderTex(span.start, span.end)}</div><div class="lean-col">${leanCol}</div></div>`;
+        rows += `<div class="row" id="${id}"><div class="paper-col">${renderTex(...listTrimmed(span.start, span.end))}</div><div class="lean-col">${leanCol}</div></div>`;
         for (const s of adds) if (s.decl !== decl && lastGroup.get(s.decl) === gi && !placed.has(s.key)) { rows += addRow(s); placed.add(s.key); }
       }
       for (const s of adds) if (!placed.has(s.key)) { rows += addRow(s); placed.add(s.key); }
