@@ -138,6 +138,13 @@ test('hyperref preserves its display text and only links local anchors', () => {
   assert.equal(hostile.warnings.length, 2);
 });
 
+test('layout, bibliography and appendix markers render nothing and raise no warning', () => {
+  const r = renderer();
+  const html = r.text(String.raw`\setlength{\parindent}{0pt}A\bibliographystyle{amsplain}\bibliography{references}\begin{appendix}B\end{appendix}`);
+  assert.equal(html, 'AB');
+  assert.deepEqual(r.warnings, []);
+});
+
 test('unknown commands and hostile text stay visible without becoming HTML', () => {
   const r = renderer();
   const html = r.text(String.raw`\futurecmd{<img src=x onerror=alert(1)>}`);

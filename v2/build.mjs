@@ -94,6 +94,8 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
   let scopeRanges = [[doc.docStart, doc.docEnd]];
   if (map.scope?.sections) {
     scopeRanges = map.scope.sections.map((num) => {
+      // "front": the text before the first section, e.g. the abstract.
+      if (String(num) === 'front') return [doc.docStart, topSections[0]?.start ?? doc.docEnd];
       const i = topSections.findIndex((s) => s.number === String(num));
       if (i < 0) { errors.push(`scope: section ${num} not found`); return null; }
       return [topSections[i].start, topSections[i + 1]?.start ?? doc.docEnd];
@@ -116,7 +118,7 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
     else {
       // A passage outside environments: the paragraph that contains the quote.
       let a = raw.lastIndexOf('\n\n', r.start), b = raw.indexOf('\n\n', r.end);
-      a = a < 0 ? doc.docStart : a + 2; b = b < 0 ? doc.docEnd : b;
+      a = a < doc.docStart ? doc.docStart : a + 2; b = b < 0 ? doc.docEnd : b;
       const inner = doc.envs.find((x) => x.start >= a && x.start < b);
       if (inner) b = Math.min(b, inner.start);
       const prev = [...doc.envs].reverse().find((x) => x.end > a && x.end <= r.start);
@@ -191,7 +193,7 @@ export function build({ mapPath, paperArg = null, extractionPath = null, previou
   const macros = { ...(map.macros ?? {}) };
   for (const m of doc.text.matchAll(/\\newcommand\s*\{(\\[A-Za-z]+)\}\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g)) if (!m[2].includes('#')) macros[m[1]] = m[2];
   for (const m of doc.text.matchAll(/\\DeclareMathOperator\s*\{(\\[A-Za-z]+)\}\s*\{([^}]*)\}/g)) macros[m[1]] = `\\operatorname{${m[2]}}`;
-  const tex = new TexRenderer({ macros, refs, cites: bibCites(bib), eqAuto });
+  const tex = new TexRenderer({ macros, refs, cites: bibCites(bib), eqAuto, leanCommands: settings.lean_ref_commands ?? [] });
   const renderTex = (a, b) => tex.block(doc.text.slice(a, b), a);
   const envHead = (env) => `<span class="env-head">${escapeHtml(env.title)}${env.number ? ' ' + escapeHtml(env.number) : ''}${env.optArg ? ' (' + tex.text(env.optArg, env.optStart) + ')' : ''}.</span>`;
   const cardTitle = (c) => c.env ? `${c.env.title}${c.env.number ? ' ' + c.env.number : ''}` : (c.entry.title ?? `Paragraph${c.entry.short ? ': ' + c.entry.short : ''}`);
