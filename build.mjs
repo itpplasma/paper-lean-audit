@@ -738,6 +738,17 @@ function depGraph() {
   return svg + '</svg>';
 }
 
+// The proof map opens the reader; its legend names only the statement relations the map uses.
+function proofMap() {
+  const nodes = items.filter((it) => it.in_graph);
+  if (!nodes.length) return '';
+  const used = [...new Set(nodes.map((n) => n.statement_relation))].filter((k) => REL[k]);
+  const legend = used.map((k) => `<li title="${escapeHtml(REL[k].meaning)}"><span class="swatch s-${REL[k].color}"></span>${escapeHtml(REL[k].label)}</li>`).join('');
+  const links = (map.graph_links ?? []).map((l) => `<a href="${escapeHtml(l.href)}">${escapeHtml(l.label)} ↗</a>`).join('');
+  return `<section id="graph" class="proof-map"><h2>Proof map</h2>${map.graph_intro ? `<p class="muted">${mdInline(map.graph_intro)}</p>` : ''}
+${depGraph()}<ul class="graph-legend"><li class="legend-title">Lean statement:</li>${legend}</ul>${links ? `<div class="reader-links graph-links">${links}</div>` : ''}</section>`;
+}
+
 const challengeDefinitions = definitionRefs.map((ref) => {
   const info = resolveLean(ref, 'challenge-definitions');
   const source = map.sources[ref.repo ?? 'formal'];
@@ -824,11 +835,11 @@ const html = `<!doctype html>
   <div class="reader-links"><a href="./human_readable_main.pdf">Paper PDF ↗</a></div>
   ${guidedItems.length ? `<div class="guided-start"><a data-guided-start href="#item-${slug(guidedItems[0].id)}">Begin reading →</a><a id="guided-resume" data-guided-resume hidden>Continue reading →</a></div>` : ''}
 </header>
+${proofMap()}
 ${sectionHtml}
 <details class="reference-material"><summary>Definitions and references</summary>
 ${challengeDefinitions ? `<section id="challenge-definitions"><h2>Challenge definitions</h2>${challengeEndpoints}<details><summary>Definitions</summary>${challengeDefinitions}</details></section>` : ''}
-<section id="graph" data-reference-material><h2>Dependency map</h2>${depGraph()}</section>
-<section id="lean-only" data-reference-material><h2>Additional Lean results</h2><table class="reg"><thead><tr><th>Lean</th><th>Result</th><th>Paper</th></tr></thead><tbody>${leanOnly}</tbody></table></section>
+${leanOnly ? `<section id="lean-only" data-reference-material><h2>Additional Lean results</h2><table class="reg"><thead><tr><th>Lean</th><th>Result</th><th>Paper</th></tr></thead><tbody>${leanOnly}</tbody></table></section>` : ''}
 <section id="lean-index" data-reference-material><h2>Declaration index</h2><table class="reg"><thead><tr><th>Declaration</th><th>Source</th><th>Paper</th></tr></thead><tbody>${leanIndexRows}</tbody></table></section>
 </details>
 <footer><a href="./manifest.json">Sources</a><a href="https://github.com/itpplasma/stafford38-supplementary">Repository ↗</a></footer>

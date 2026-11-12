@@ -162,6 +162,21 @@ test('reader header links only the published paper PDF', (t) => {
   assert.deepEqual([...links.matchAll(/href="([^"]+)"/g)].map((m) => m[1]), ['./human_readable_main.pdf']);
 });
 
+test('the proof map opens the reader with its legend and graph links', (t) => {
+  const f = fixture(t);
+  f.map.items[0].in_graph = true;
+  f.map.items[0].graph_sub = 'main theorem';
+  f.map.graph_links = [{ label: 'Detailed proof graph', href: 'proof-dag.html' }];
+  const result = f.run();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const html = fs.readFileSync(f.htmlPath, 'utf8');
+  const graph = html.indexOf('<section id="graph"');
+  assert.ok(graph > html.indexOf('</header>') && graph < html.indexOf('class="paper-section"'));
+  assert.equal(html.match(/id="graph"/g).length, 1);
+  assert.match(html, /<span class="swatch s-green"><\/span>exact/);
+  assert.match(html, /<a href="proof-dag\.html">Detailed proof graph ↗<\/a>/);  assert.doesNotMatch(html, /id="lean-only"/);
+});
+
 test('excluded manuscript statements and duplicate labels do not enter the audit', (t) => {
   const f = fixture(t);
   fs.appendFileSync(path.join(f.paper.repo, 'human_readable_main.tex'),
